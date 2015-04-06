@@ -971,18 +971,6 @@ _dbus_string_append (DBusString *str,
   return append (real, buffer, buffer_len);
 }
 
-/** assign 2 bytes from one string to another */
-#define ASSIGN_2_OCTETS(p, octets) \
-  *((dbus_uint16_t*)(p)) = *((dbus_uint16_t*)(octets));
-
-/** assign 4 bytes from one string to another */
-#define ASSIGN_4_OCTETS(p, octets) \
-  *((dbus_uint32_t*)(p)) = *((dbus_uint32_t*)(octets));
-
-/** assign 8 bytes from one string to another */
-#define ASSIGN_8_OCTETS(p, octets) \
-  *((dbus_uint64_t*)(p)) = *((dbus_uint64_t*)(octets));
-
 /**
  * Inserts 2 bytes aligned on a 2 byte boundary
  * with any alignment padding initialized to 0.
@@ -1002,7 +990,7 @@ _dbus_string_insert_2_aligned (DBusString         *str,
   if (!align_insert_point_then_open_gap (str, &insert_at, 2, 2))
     return FALSE;
 
-  ASSIGN_2_OCTETS (real->str + insert_at, octets);
+  memcpy (real->str + insert_at, octets, 2);
 
   return TRUE;
 }
@@ -1026,7 +1014,7 @@ _dbus_string_insert_4_aligned (DBusString         *str,
   if (!align_insert_point_then_open_gap (str, &insert_at, 4, 4))
     return FALSE;
 
-  ASSIGN_4_OCTETS (real->str + insert_at, octets);
+  memcpy (real->str + insert_at, octets, 4);
 
   return TRUE;
 }
@@ -1051,8 +1039,8 @@ _dbus_string_insert_8_aligned (DBusString         *str,
     return FALSE;
 
   _dbus_assert (_DBUS_ALIGN_VALUE (insert_at, 8) == (unsigned) insert_at);
-  
-  ASSIGN_8_OCTETS (real->str + insert_at, octets);
+
+  memcpy (real->str + insert_at, octets, 8);
 
   return TRUE;
 }
