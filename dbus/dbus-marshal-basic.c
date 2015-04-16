@@ -181,10 +181,7 @@ _dbus_unpack_uint16 (int                  byte_order,
 {
   _dbus_assert (_DBUS_ALIGN_ADDRESS (data, 2) == data);
 
-  if (byte_order == DBUS_LITTLE_ENDIAN)
-    return DBUS_UINT16_FROM_LE (*(dbus_uint16_t*)data);
-  else
-    return DBUS_UINT16_FROM_BE (*(dbus_uint16_t*)data);
+  return _dbus_unpack_uint16_inline (byte_order, data);
 }
 #endif /* _dbus_unpack_uint16 */
 
@@ -202,10 +199,7 @@ _dbus_unpack_uint32 (int                  byte_order,
 {
   _dbus_assert (_DBUS_ALIGN_ADDRESS (data, 4) == data);
 
-  if (byte_order == DBUS_LITTLE_ENDIAN)
-    return DBUS_UINT32_FROM_LE (*(dbus_uint32_t*)data);
-  else
-    return DBUS_UINT32_FROM_BE (*(dbus_uint32_t*)data);
+  return _dbus_unpack_uint32_inline (byte_order, data);
 }
 #endif /* _dbus_unpack_uint32 */
 

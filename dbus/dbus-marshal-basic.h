@@ -137,15 +137,30 @@
 
 #ifdef DBUS_DISABLE_ASSERT
 #define _dbus_unpack_uint16(byte_order, data)           \
-   (((byte_order) == DBUS_LITTLE_ENDIAN) ?              \
-     DBUS_UINT16_FROM_LE (*(dbus_uint16_t*)(data)) :    \
-     DBUS_UINT16_FROM_BE (*(dbus_uint16_t*)(data)))
-
+  _dbus_unpack_uint16_inline (byte_order, data)
 #define _dbus_unpack_uint32(byte_order, data)           \
-   (((byte_order) == DBUS_LITTLE_ENDIAN) ?              \
-     DBUS_UINT32_FROM_LE (*(dbus_uint32_t*)(data)) :    \
-     DBUS_UINT32_FROM_BE (*(dbus_uint32_t*)(data)))
+   _dbus_unpack_uint32_inline (byte_order, data)
 #endif
+
+static inline dbus_uint16_t
+_dbus_unpack_uint16_inline (int                  byte_order,
+                            const unsigned char *data)
+{
+  if (byte_order == DBUS_LITTLE_ENDIAN)
+    return (data[1] << 8) | data[0];
+  else
+    return (data[0] << 8) | data[1];
+}
+
+static inline dbus_uint32_t
+_dbus_unpack_uint32_inline (int                  byte_order,
+                            const unsigned char *data)
+{
+  if (byte_order == DBUS_LITTLE_ENDIAN)
+    return (data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0];
+  else
+    return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+}
 
 #ifndef _dbus_unpack_uint16
 DBUS_PRIVATE_EXPORT
