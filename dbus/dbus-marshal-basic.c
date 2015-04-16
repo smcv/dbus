@@ -110,10 +110,10 @@ pack_2_octets (dbus_uint16_t   value,
 {
   _dbus_assert (_DBUS_ALIGN_ADDRESS (data, 2) == data);
 
-  if ((byte_order) == DBUS_LITTLE_ENDIAN)
-    *((dbus_uint16_t*)(data)) = DBUS_UINT16_TO_LE (value);
-  else
-    *((dbus_uint16_t*)(data)) = DBUS_UINT16_TO_BE (value);
+  if ((byte_order) != DBUS_COMPILER_BYTE_ORDER)
+    value = DBUS_UINT16_SWAP_LE_BE (value);
+
+  memcpy (data, &value, sizeof (value));
 }
 
 static void
@@ -123,10 +123,10 @@ pack_4_octets (dbus_uint32_t   value,
 {
   _dbus_assert (_DBUS_ALIGN_ADDRESS (data, 4) == data);
 
-  if ((byte_order) == DBUS_LITTLE_ENDIAN)
-    *((dbus_uint32_t*)(data)) = DBUS_UINT32_TO_LE (value);
-  else
-    *((dbus_uint32_t*)(data)) = DBUS_UINT32_TO_BE (value);
+  if ((byte_order) != DBUS_COMPILER_BYTE_ORDER)
+    value = DBUS_UINT32_SWAP_LE_BE (value);
+
+  memcpy (data, &value, sizeof (value));
 }
 
 static void
@@ -136,10 +136,10 @@ pack_8_octets (dbus_uint64_t      value,
 {
   _dbus_assert (_DBUS_ALIGN_ADDRESS (data, 8) == data);
 
-  if ((byte_order) == DBUS_LITTLE_ENDIAN)
-    *((dbus_uint64_t*)(data)) = DBUS_UINT64_TO_LE (value);
-  else
-    *((dbus_uint64_t*)(data)) = DBUS_UINT64_TO_BE (value);
+  if ((byte_order) != DBUS_COMPILER_BYTE_ORDER)
+    value = DBUS_UINT64_SWAP_LE_BE (value);
+
+  memcpy (data, &value, sizeof (value));
 }
 
 /**
@@ -537,19 +537,21 @@ _dbus_marshal_read_basic (const DBusString      *str,
     {
     case DBUS_TYPE_BYTE:
       {
-      volatile unsigned char *vp = value;
-      *vp = (unsigned char) _dbus_string_get_byte (str, pos);
+      unsigned char *vp = value;
+
+      *vp = _dbus_string_get_byte (str, pos);
       (pos)++;
       }
       break;
     case DBUS_TYPE_INT16:
     case DBUS_TYPE_UINT16:
       {
-      volatile dbus_uint16_t *vp = value;
+      dbus_uint16_t *vp = value;
+
       pos = _DBUS_ALIGN_VALUE (pos, 2);
-      *vp = *(dbus_uint16_t *)(str_data + pos);
+      memcpy (vp, str_data + pos, sizeof (*vp));
       if (byte_order != DBUS_COMPILER_BYTE_ORDER)
-	*vp = DBUS_UINT16_SWAP_LE_BE (*vp);
+        *vp = DBUS_UINT16_SWAP_LE_BE (*vp);
       pos += 2;
       }
       break;
@@ -558,11 +560,12 @@ _dbus_marshal_read_basic (const DBusString      *str,
     case DBUS_TYPE_BOOLEAN:
     case DBUS_TYPE_UNIX_FD:
       {
-      volatile dbus_uint32_t *vp = value;
+      dbus_uint32_t *vp = value;
+
       pos = _DBUS_ALIGN_VALUE (pos, 4);
-      *vp = *(dbus_uint32_t *)(str_data + pos);
+      memcpy (vp, str_data + pos, sizeof (*vp));
       if (byte_order != DBUS_COMPILER_BYTE_ORDER)
-	*vp = DBUS_UINT32_SWAP_LE_BE (*vp);
+        *vp = DBUS_UINT32_SWAP_LE_BE (*vp);
       pos += 4;
       }
       break;
@@ -570,12 +573,12 @@ _dbus_marshal_read_basic (const DBusString      *str,
     case DBUS_TYPE_UINT64:
     case DBUS_TYPE_DOUBLE:
       {
-      volatile dbus_uint64_t *vp = value;
+      dbus_uint64_t *vp = value;
+
       pos = _DBUS_ALIGN_VALUE (pos, 8);
+      memcpy (vp, str_data + pos, sizeof (*vp));
       if (byte_order != DBUS_COMPILER_BYTE_ORDER)
-        *vp = DBUS_UINT64_SWAP_LE_BE (*(dbus_uint64_t*)(str_data + pos));
-      else
-        *vp = *(dbus_uint64_t*)(str_data + pos);
+        *vp = DBUS_UINT64_SWAP_LE_BE (*vp);
       pos += 8;
       }
       break;
@@ -583,7 +586,7 @@ _dbus_marshal_read_basic (const DBusString      *str,
     case DBUS_TYPE_OBJECT_PATH:
       {
         int len;
-        volatile char **vp = value;
+        char **vp = value;
 
         len = _dbus_marshal_read_uint32 (str, pos, byte_order, &pos);
 
@@ -595,7 +598,7 @@ _dbus_marshal_read_basic (const DBusString      *str,
     case DBUS_TYPE_SIGNATURE:
       {
         int len;
-        volatile char **vp = value;
+        char **vp = value;
 
         len = _dbus_string_get_byte (str, pos);
         pos += 1;
@@ -1391,10 +1394,13 @@ _dbus_verbose_bytes (const unsigned char *data,
           if (i > 7 &&
               _DBUS_ALIGN_ADDRESS (&data[i], 8) == &data[i])
             {
-              _dbus_verbose (" u64: 0x%" PRIx64,
-                             *(dbus_uint64_t*)&data[i-8]);
-              _dbus_verbose (" dbl: %g",
-                             *(double*)&data[i-8]);
+              double d;
+              dbus_uint64_t u64;
+
+              memcpy (&u64, &data[i-8], sizeof (u64));
+              _dbus_verbose (" u64: 0x%" PRIx64 "x", u64);
+              memcpy (&d, &data[i-8], sizeof (d));
+              _dbus_verbose (" dbl: %g", d);
             }
 
           _dbus_verbose ("\n");
