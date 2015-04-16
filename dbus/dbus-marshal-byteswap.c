@@ -31,6 +31,38 @@
  * @{
  */
 
+static inline void
+swap (unsigned char *a,
+      unsigned char *b)
+{
+  unsigned char tmp = *a;
+
+  *a = *b;
+  *b = tmp;
+}
+
+static inline void
+swap2 (unsigned char *p)
+{
+  swap (p + 0, p + 1);
+}
+
+static inline void
+swap4 (unsigned char *p)
+{
+  swap (p + 0, p + 3);
+  swap (p + 1, p + 2);
+}
+
+static inline void
+swap8 (unsigned char *p)
+{
+  swap (p + 0, p + 7);
+  swap (p + 1, p + 6);
+  swap (p + 2, p + 5);
+  swap (p + 3, p + 4);
+}
+
 static void
 byteswap_body_helper (DBusTypeReader       *reader,
                       dbus_bool_t           walk_reader_to_end,
@@ -53,7 +85,7 @@ byteswap_body_helper (DBusTypeReader       *reader,
         case DBUS_TYPE_UINT16:
           {
             p = _DBUS_ALIGN_ADDRESS (p, 2);
-            *((dbus_uint16_t*)p) = DBUS_UINT16_SWAP_LE_BE (*((dbus_uint16_t*)p));
+            swap2 (p);
             p += 2;
           }
           break;
@@ -63,7 +95,7 @@ byteswap_body_helper (DBusTypeReader       *reader,
         case DBUS_TYPE_UINT32:
           {
             p = _DBUS_ALIGN_ADDRESS (p, 4);
-            *((dbus_uint32_t*)p) = DBUS_UINT32_SWAP_LE_BE (*((dbus_uint32_t*)p));
+            swap4 (p);
             p += 4;
           }
           break;
@@ -73,7 +105,7 @@ byteswap_body_helper (DBusTypeReader       *reader,
         case DBUS_TYPE_DOUBLE:
           {
             p = _DBUS_ALIGN_ADDRESS (p, 8);
-            *((dbus_uint64_t*)p) = DBUS_UINT64_SWAP_LE_BE (*((dbus_uint64_t*)p));
+            swap8 (p);
             p += 8;
           }
           break;
@@ -87,8 +119,7 @@ byteswap_body_helper (DBusTypeReader       *reader,
             p = _DBUS_ALIGN_ADDRESS (p, 4);
 
             array_len = _dbus_unpack_uint32 (old_byte_order, p);
-
-            *((dbus_uint32_t*)p) = DBUS_UINT32_SWAP_LE_BE (*((dbus_uint32_t*)p));
+            swap4 (p);
             p += 4;
 
             if (current_type == DBUS_TYPE_ARRAY)
