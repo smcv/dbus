@@ -142,6 +142,9 @@ usage (void)
       " [--introspect]"
       " [--address=ADDRESS]"
       " [--nopidfile]"
+      " [--nosyslog]"
+      " [--syslog]"
+      " [--syslog-only]"
       " [--nofork]"
 #ifdef DBUS_UNIX
       " [--fork]"
@@ -415,6 +418,21 @@ main (int argc, char **argv)
       else if (strcmp (arg, "--introspect") == 0)
         {
           introspect ();
+        }
+      else if (strcmp (arg, "--nosyslog") == 0)
+        {
+          flags &= ~BUS_CONTEXT_FLAG_SYSLOG_ALWAYS;
+          flags |= BUS_CONTEXT_FLAG_SYSLOG_NEVER;
+        }
+      else if (strcmp (arg, "--syslog") == 0)
+        {
+          flags &= ~BUS_CONTEXT_FLAG_SYSLOG_NEVER;
+          flags |= BUS_CONTEXT_FLAG_SYSLOG_ALWAYS;
+        }
+      else if (strcmp (arg, "--syslog-only") == 0)
+        {
+          flags &= ~BUS_CONTEXT_FLAG_SYSLOG_NEVER;
+          flags |= (BUS_CONTEXT_FLAG_SYSLOG_ALWAYS|BUS_CONTEXT_FLAG_SYSLOG_ONLY);
         }
       else if (strcmp (arg, "--nofork") == 0)
         {
