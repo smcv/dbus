@@ -134,6 +134,77 @@
 
 #endif /* Solaris */
 
+/**
+ * Ensure that the standard file descriptors stdin, stdout and stderr
+ * are open, by opening /dev/null if necessary.
+ *
+ * This function does not use DBusError, to avoid calling malloc(), so
+ * that it can be used in contexts where an async-signal-safe function
+ * is required (for example after fork()). Instead, on failure it sets
+ * errno and returns something like "Failed to open /dev/null" in
+ * *error_str_p.
+ *
+ * This function can only be called while single-threaded: either during
+ * startup of an executable, or after fork().
+ */
+dbus_bool_t
+_dbus_open_standard_fds (DBusOpenStandardFdsFlags   flags,
+                         const char               **error_str_p)
+{
+  static int const relevant_flag[] = { DBUS_OPEN_STDIN_NULL,
+      DBUS_OPEN_STDOUT_NULL,
+      DBUS_OPEN_STDERR_NULL };
+  const char *error_str = "Failed mysteriously";
+  int devnull = -1;
+  int saved_errno;
+  /* This function relies on the standard fds having their POSIX values. */
+  _DBUS_STATIC_ASSERT (STDIN_FILENO == 0);
+  _DBUS_STATIC_ASSERT (STDOUT_FILENO == 1);
+  _DBUS_STATIC_ASSERT (STDERR_FILENO == 2);
+  int i;
+
+  for (i = STDIN_FILENO; i <= STDERR_FILENO; i++)
+    {
+      /* Because we rely on being single-threaded, and we want the
+       * standard fds to not be close-on-exec, we don't set it
+       * close-on-exec. */
+      if (devnull < i)
+        devnull = open ("/dev/null", O_RDWR);
+
+      if (devnull < 0)
+        {
+          error_str = "Failed to open /dev/null";
+          goto out;
+        }
+
+      /* We already opened all fds < i. */
+      _dbus_assert (devnull >= i);
+
+      if (devnull != i && (flags & relevant_flag[i]) != 0)
+        {
+          if (dup2 (devnull, i) < 0)
+            {
+              error_str = "Failed to dup2 /dev/null onto a standard fd";
+              goto out;
+            }
+        }
+    }
+
+  error_str = NULL;
+
+out:
+  saved_errno = errno;
+
+  if (devnull > STDERR_FILENO)
+    close (devnull);
+
+  if (error_str_p != NULL)
+    *error_str_p = error_str;
+
+  errno = saved_errno;
+  return (error_str == NULL);
+}
+
 static dbus_bool_t _dbus_set_fd_nonblocking (int             fd,
                                              DBusError      *error);
 
