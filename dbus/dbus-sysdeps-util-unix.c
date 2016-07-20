@@ -50,10 +50,6 @@
 #include <dirent.h>
 #include <sys/un.h>
 
-#ifdef HAVE_SYSLOG_H
-#include <syslog.h>
-#endif
-
 #ifdef HAVE_SYS_SYSLIMITS_H
 #include <sys/syslimits.h>
 #endif
