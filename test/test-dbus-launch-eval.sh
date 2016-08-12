@@ -25,6 +25,7 @@
 set -e
 
 export DBUS_DEBUG_OUTPUT=1
+export DBUS_USE_TEST_BINARY=1
 echo "# dbus-daemon binary: ${DBUS_TEST_DAEMON:=dbus-daemon}"
 echo "# dbus-launch binary: ${DBUS_TEST_DBUS_LAUNCH:=dbus-launch}"
 echo "# dbus-send binary: ${DBUS_TEST_DBUS_SEND:=dbus-send}"
