@@ -1361,7 +1361,6 @@ dnl TODO: The compiler flags below disable warnings that the
 dnl       compiler emits while building dbus. Fix the source
 dnl       code and remove these flags.
 DISABLE_WARNINGS="$DISABLE_WARNINGS
-                  -Wno-address
                   -Wno-format-nonliteral
                   -Wno-redundant-decls
                   -Wno-suggest-attribute=format
