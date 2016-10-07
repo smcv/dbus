@@ -52,7 +52,7 @@ x_io_error_handler (Display *xdisplay)
 
 static void
 remove_prefix (char *s,
-               char *prefix)
+               const char *prefix)
 {
   int plen;
 
