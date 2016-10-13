@@ -410,6 +410,8 @@ _dbus_transport_open (DBusAddressEntry *entry,
           _DBUS_ASSERT_ERROR_IS_SET (&tmp_error);
           goto out;
           break;
+        default:
+          break;
         }
     }
 
@@ -746,6 +748,12 @@ _dbus_transport_try_to_authenticate (DBusTransport *transport)
             case DBUS_AUTH_STATE_AUTHENTICATED:
               /* leave as maybe_authenticated */
               break;
+            case DBUS_AUTH_STATE_WAITING_FOR_INPUT:
+            case DBUS_AUTH_STATE_WAITING_FOR_MEMORY:
+            case DBUS_AUTH_STATE_HAVE_BYTES_TO_SEND:
+            case DBUS_AUTH_STATE_NEED_DISCONNECT:
+            case DBUS_AUTH_STATE_INVALID:
+              /* fall through */
             default:
               maybe_authenticated = FALSE;
             }

@@ -2688,6 +2688,8 @@ HANDLE _dbus_global_lock (const char *mutexname)
        case WAIT_FAILED:
        case WAIT_TIMEOUT:
                return 0;
+       default:
+               break;
      }
 
    return mutex;
@@ -3525,6 +3527,9 @@ _dbus_strerror (int error_number)
 
     case WSASYSCALLFAILURE:
       return "System call failure";
+
+    default:
+      break;
     }
   msg = strerror (error_number);
   if (msg == NULL)
@@ -3688,6 +3693,7 @@ _dbus_logv (DBusSystemLogSeverity  severity,
      case DBUS_SYSTEM_LOG_WARNING: s = "warning"; break;
      case DBUS_SYSTEM_LOG_SECURITY: s = "security"; break;
      case DBUS_SYSTEM_LOG_FATAL: s = "fatal"; break;
+     default: break;
    }
 
   if (log_flags & DBUS_LOG_FLAGS_SYSTEM_LOG)

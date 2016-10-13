@@ -429,6 +429,9 @@ read_data (DBusBabysitter *sitter,
 
     case READ_STATUS_OK:
       break;
+
+    default:
+      break;
     }
   
   if (got == 1)
@@ -452,6 +455,8 @@ read_data (DBusBabysitter *sitter,
               case READ_STATUS_EOF:
                 return r;
               case READ_STATUS_OK:
+                break;
+              default:
                 break;
               }
             
@@ -512,6 +517,8 @@ read_data (DBusBabysitter *sitter,
               case READ_STATUS_EOF:
                 return r;
               case READ_STATUS_OK:
+                break;
+              default:
                 break;
               }
             

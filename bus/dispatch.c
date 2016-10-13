@@ -2956,6 +2956,9 @@ check_existent_service_no_auto_start (BusContext     *context,
 	    goto out;
 
           break;
+
+        default:
+          break;
         }
     }
 
@@ -3552,6 +3555,9 @@ check_existent_service_auto_start (BusContext     *context,
         case GOT_SOMETHING_ELSE:
           _dbus_warn ("Unexpected message after auto activation");
           goto out;
+
+        default:
+          break;
         }
     }
 
@@ -4245,6 +4251,9 @@ check_shell_service_success_auto_start (BusContext     *context,
         case GOT_SOMETHING_ELSE:
           _dbus_warn ("Unexpected message after auto activation");
           goto out;
+
+        default:
+          break;
         }
     }
 
@@ -4698,6 +4707,9 @@ check_list_services (BusContext     *context,
 	    }
 
 	  break;
+
+        default:
+          break;
 	}
     }
 

@@ -149,6 +149,8 @@ spawn_dbus_daemon (const gchar *binary,
 
             break;
 
+          case TEST_USER_ME:
+            /* fall through */
           default:
             g_assert_not_reached ();
         }

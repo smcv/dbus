@@ -241,6 +241,8 @@ binary_filter_func (DBusConnection *connection,
         break;
 
       case BINARY_MODE_RAW:
+      case BINARY_MODE_NOT:
+        /* fall through */
       default:
         /* nothing special, just the raw message stream */
         break;
@@ -474,6 +476,8 @@ main (int argc, char *argv[])
             case DBUS_BUS_SESSION:
               where = "session bus";
               break;
+            case DBUS_BUS_STARTER:
+              /* fall through */
             default:
               where = "";
             }
@@ -582,6 +586,9 @@ main (int argc, char *argv[])
                 exit (1);
               }
           }
+        break;
+
+      default:
         break;
     }
 

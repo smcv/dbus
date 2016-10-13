@@ -69,6 +69,8 @@ bus_policy_rule_new (BusPolicyRuleType type,
       break;
     case BUS_POLICY_RULE_OWN:
       break;
+    default:
+      break;
     }
   
   return rule;
@@ -115,6 +117,8 @@ bus_policy_rule_unref (BusPolicyRule *rule)
         case BUS_POLICY_RULE_USER:
           break;
         case BUS_POLICY_RULE_GROUP:
+          break;
+        default:
           break;
         }
       
@@ -260,6 +264,8 @@ add_list_to_client (DBusList        **list,
           /* These are per-connection */
           if (!bus_client_policy_append_rule (client, rule))
             return FALSE;
+          break;
+        default:
           break;
         }
     }
@@ -833,6 +839,8 @@ bus_client_policy_optimize (BusClientPolicy *policy)
         case BUS_POLICY_RULE_USER:
         case BUS_POLICY_RULE_GROUP:
           _dbus_assert_not_reached ("invalid rule");
+          break;
+        default:
           break;
         }
 

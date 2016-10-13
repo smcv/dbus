@@ -2396,6 +2396,8 @@ string_from_seed (char *buf,
     case 2:
       len -= 2;
       break;
+    default:
+      break;
     }
   if (len < 0)
     len = 0;

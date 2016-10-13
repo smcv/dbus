@@ -1380,6 +1380,8 @@ _dbus_lm_strerror(int error_number)
       return "The password does not meet the requirements of the password filter DLLs.";
 #endif
 
+      default:
+        break;
     }
   msg = strerror (error_number);
   if (msg == NULL)

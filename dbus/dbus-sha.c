@@ -718,6 +718,8 @@ get_next_expected_result (DBusString *results,
                   _dbus_string_delete (result, i, 1);
                   --i; /* to offset ++i below */
                   break;
+                default:
+                  break;
                 }
 
               ++i;

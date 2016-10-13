@@ -128,6 +128,9 @@ signal_handler (int sig)
           }
       }
       break;
+
+    default:
+      break;
     }
 }
 #endif /* DBUS_UNIX */

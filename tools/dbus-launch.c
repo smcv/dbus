@@ -471,6 +471,8 @@ signal_handler (int sig)
     case SIGTERM:
       got_sighup = TRUE;
       break;
+    default:
+      break;
     }
 }
 
@@ -708,6 +710,8 @@ babysit (int   exit_with_session,
       fprintf (stderr, "Error in dbus-launch reading PID from bus daemon: %s\n",
 	       strerror (errno));
       exit (1);
+      break;
+    default:
       break;
     }
 
@@ -1328,6 +1332,8 @@ main (int argc, char **argv)
                    strerror (errno));
           exit (1);
           break;
+        default:
+          break;
         }
         
       close (bus_address_to_launcher_pipe[READ_END]);
@@ -1347,6 +1353,8 @@ main (int argc, char **argv)
 		   strerror (errno));
 	  exit (1);
 	  break;
+        default:
+          break;
 	}
 
       end = NULL;

@@ -386,6 +386,9 @@ main (int argc, char **argv)
                me, strerror (errno));
       return 127;
       break;
+
+    default:
+      break;
     }
 
   close (bus_address_pipe[PIPE_READ_END]);
