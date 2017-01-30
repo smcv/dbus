@@ -1732,43 +1732,37 @@ AC_SUBST(TEST_LAUNCH_HELPER_BINARY)
 AC_DEFINE_UNQUOTED(DBUS_TEST_LAUNCH_HELPER_BINARY, "$TEST_LAUNCH_HELPER_BINARY",
                    [Full path to the launch helper test program in the builddir])
 
-#### Find socket directories
-if ! test -z "$TMPDIR" ; then
-   DEFAULT_SOCKET_DIR=$TMPDIR
-elif ! test -z "$TEMP" ; then
-   DEFAULT_SOCKET_DIR=$TEMP
-elif ! test -z "$TMP" ; then
-   DEFAULT_SOCKET_DIR=$TMP
-else
-   DEFAULT_SOCKET_DIR=/tmp
-fi
+AS_IF([test "x$dbus_win" = xyes],
+  [
+    TEST_LISTEN="tcp:host=localhost"
+  ],
+  [
+    AS_IF([! test -z "$TMPDIR"], [DEFAULT_SOCKET_DIR=$TMPDIR],
+      [! test -z "$TEMP"], [DEFAULT_SOCKET_DIR=$TEMP],
+      [! test -z "$TMP"], [DEFAULT_SOCKET_DIR=$TMP],
+      [DEFAULT_SOCKET_DIR=/tmp])
 
-DEFAULT_SOCKET_DIR=`echo $DEFAULT_SOCKET_DIR | sed 's/+/%2B/g'`
+    DEFAULT_SOCKET_DIR=`echo $DEFAULT_SOCKET_DIR | sed 's/+/%2B/g'`
 
-if ! test -z "$with_test_socket_dir" ; then
-   TEST_SOCKET_DIR="$with_test_socket_dir"
-else
-   TEST_SOCKET_DIR=$DEFAULT_SOCKET_DIR
-fi
-AC_SUBST(TEST_SOCKET_DIR)
-AC_DEFINE_UNQUOTED(DBUS_TEST_SOCKET_DIR, "$TEST_SOCKET_DIR", [Where to put test sockets])
+    AS_IF([! test -z "$with_test_socket_dir"],
+      [TEST_SOCKET_DIR="$with_test_socket_dir"],
+      [TEST_SOCKET_DIR=$DEFAULT_SOCKET_DIR])
 
-if test "x$dbus_unix" = xyes; then
-  TEST_LISTEN="unix:tmpdir=$TEST_SOCKET_DIR"
-else
-  TEST_LISTEN="tcp:host=localhost"
-fi
+    AC_SUBST([TEST_SOCKET_DIR])
+    AC_DEFINE_UNQUOTED([DBUS_TEST_SOCKET_DIR], ["$TEST_SOCKET_DIR"], [Where to put test sockets])
+    TEST_LISTEN="unix:tmpdir=$TEST_SOCKET_DIR"
+
+    AS_IF([test -z "$with_session_socket_dir"],
+      [DBUS_SESSION_SOCKET_DIR="$with_session_socket_dir"],
+      [DBUS_SESSION_SOCKET_DIR=$DEFAULT_SOCKET_DIR])
+    AC_DEFINE_UNQUOTED([DBUS_SESSION_SOCKET_DIR], ["$DBUS_SESSION_SOCKET_DIR"],
+      [Where per-session bus puts its sockets])
+    AC_SUBST([DBUS_SESSION_SOCKET_DIR])
+  ])
+
 AC_SUBST([TEST_LISTEN])
 AC_DEFINE_UNQUOTED([TEST_LISTEN], ["$TEST_LISTEN"],
   [Listening address for regression tests])
-
-if ! test -z "$with_session_socket_dir" ; then
-   DBUS_SESSION_SOCKET_DIR="$with_session_socket_dir"
-else
-   DBUS_SESSION_SOCKET_DIR=$DEFAULT_SOCKET_DIR
-fi
-AC_DEFINE_UNQUOTED(DBUS_SESSION_SOCKET_DIR, "$DBUS_SESSION_SOCKET_DIR", [Where per-session bus puts its sockets])
-AC_SUBST(DBUS_SESSION_SOCKET_DIR)
 
 # This must be a listening address. It doesn't necessarily need to be an
 # address you can connect to - it can be something vague like
@@ -1957,7 +1951,6 @@ echo "
         Console owner file path:  ${DBUS_CONSOLE_OWNER_FILE}
 	System bus user:          ${DBUS_USER}
 	Session bus services dir: ${EXPANDED_DATADIR}/dbus-1/services
-        'make check' socket dir:  ${TEST_SOCKET_DIR}
 "
 if test x$have_launchd = xyes; then
         echo "        launchd agent dir:        ${LAUNCHD_AGENT_DIR}"
