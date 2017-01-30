@@ -1737,16 +1737,9 @@ AS_IF([test "x$dbus_win" = xyes],
     TEST_LISTEN="tcp:host=localhost"
   ],
   [
-    AS_IF([! test -z "$TMPDIR"], [DEFAULT_SOCKET_DIR=$TMPDIR],
-      [! test -z "$TEMP"], [DEFAULT_SOCKET_DIR=$TEMP],
-      [! test -z "$TMP"], [DEFAULT_SOCKET_DIR=$TMP],
-      [DEFAULT_SOCKET_DIR=/tmp])
-
-    DEFAULT_SOCKET_DIR=`echo $DEFAULT_SOCKET_DIR | sed 's/+/%2B/g'`
-
     AS_IF([! test -z "$with_test_socket_dir"],
       [TEST_SOCKET_DIR="$with_test_socket_dir"],
-      [TEST_SOCKET_DIR=$DEFAULT_SOCKET_DIR])
+      [TEST_SOCKET_DIR=/tmp])
 
     AC_SUBST([TEST_SOCKET_DIR])
     AC_DEFINE_UNQUOTED([DBUS_TEST_SOCKET_DIR], ["$TEST_SOCKET_DIR"], [Where to put test sockets])
@@ -1754,7 +1747,7 @@ AS_IF([test "x$dbus_win" = xyes],
 
     AS_IF([test -z "$with_session_socket_dir"],
       [DBUS_SESSION_SOCKET_DIR="$with_session_socket_dir"],
-      [DBUS_SESSION_SOCKET_DIR=$DEFAULT_SOCKET_DIR])
+      [DBUS_SESSION_SOCKET_DIR=/tmp])
     AC_DEFINE_UNQUOTED([DBUS_SESSION_SOCKET_DIR], ["$DBUS_SESSION_SOCKET_DIR"],
       [Where per-session bus puts its sockets])
     AC_SUBST([DBUS_SESSION_SOCKET_DIR])
