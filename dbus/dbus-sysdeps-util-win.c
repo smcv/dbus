@@ -1480,6 +1480,21 @@ _dbus_replace_install_prefix (DBusString *path)
 #define DBUS_STANDARD_SYSTEM_SERVICEDIR "/dbus-1/system-services"
 
 /**
+ * Returns the standard directories for a session bus to look for
+ * transient service activation files. On Windows, there are none.
+ *
+ * @param dirs the directory list we are returning
+ * @returns #TRUE
+ */
+dbus_bool_t
+_dbus_set_up_transient_session_servicedirs (DBusList  **dirs,
+                                            DBusError  *error)
+{
+  /* Not an error, we just don't have transient session services on Windows */
+  return TRUE;
+}
+
+/**
  * Returns the standard directories for a session bus to look for service
  * activation files
  *

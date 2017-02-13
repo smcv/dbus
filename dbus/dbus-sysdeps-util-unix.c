@@ -26,6 +26,7 @@
 #include "dbus-sysdeps.h"
 #include "dbus-sysdeps-unix.h"
 #include "dbus-internals.h"
+#include "dbus-list.h"
 #include "dbus-pipe.h"
 #include "dbus-protocol.h"
 #include "dbus-string.h"
@@ -1188,8 +1189,137 @@ _dbus_replace_install_prefix (DBusString *path)
   return TRUE;
 }
 
+static dbus_bool_t
+ensure_owned_directory (const char *label,
+                        const DBusString *string,
+                        dbus_bool_t create,
+                        DBusError *error)
+{
+  const char *dir = _dbus_string_get_const_data (string);
+  struct stat buf;
+
+  /* This succeeds on EEXIST */
+  if (create && !_dbus_create_directory (string, error))
+    return FALSE;
+
+  if (stat (dir, &buf) != 0)
+    {
+      int saved_errno = errno;
+
+      dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                      "\"%s\" not available: %s", dir,
+                      _dbus_strerror (saved_errno));
+      return FALSE;
+    }
+
+  if (!S_ISDIR (buf.st_mode))
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED, "\"%s\" is not a directory",
+                      dir);
+      return FALSE;
+    }
+
+  if (buf.st_uid != geteuid ())
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "\"%s\" is owned by uid %ld, not our uid %ld",
+                      dir, (long) buf.st_uid, (long) geteuid ());
+      return FALSE;
+    }
+
+  if ((S_IWOTH | S_IWGRP) & buf.st_mode)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "\"%s\" can be written by others (mode 0%o)",
+                      dir, buf.st_mode);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 #define DBUS_UNIX_STANDARD_SESSION_SERVICEDIR "/dbus-1/services"
 #define DBUS_UNIX_STANDARD_SYSTEM_SERVICEDIR "/dbus-1/system-services"
+
+/**
+ * Returns the standard directories for a session bus to look for
+ * transient service activation files.
+ *
+ * @param dirs the directory list we are returning
+ * @returns #FALSE on error
+ */
+dbus_bool_t
+_dbus_set_up_transient_session_servicedirs (DBusList  **dirs,
+                                            DBusError  *error)
+{
+  const char *xdg_runtime_dir;
+  DBusString services;
+  DBusString dbus1;
+  DBusString xrd;
+  dbus_bool_t ret = FALSE;
+  char *data = NULL;
+
+  if (!_dbus_string_init (&dbus1))
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  if (!_dbus_string_init (&services))
+    {
+      _dbus_string_free (&dbus1);
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  if (!_dbus_string_init (&xrd))
+    {
+      _dbus_string_free (&dbus1);
+      _dbus_string_free (&services);
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  xdg_runtime_dir = _dbus_getenv ("XDG_RUNTIME_DIR");
+
+  /* Not an error, we just can't have transient session services */
+  if (xdg_runtime_dir == NULL)
+    return TRUE;
+
+  if (!_dbus_string_append (&xrd, xdg_runtime_dir) ||
+      !_dbus_string_append_printf (&dbus1, "%s/dbus-1",
+                                   xdg_runtime_dir) ||
+      !_dbus_string_append_printf (&services, "%s/dbus-1/services",
+                                   xdg_runtime_dir))
+    {
+      _DBUS_SET_OOM (error);
+      goto out;
+    }
+
+  if (!ensure_owned_directory ("XDG_RUNTIME_DIR", &xrd, FALSE, error) ||
+      !ensure_owned_directory ("XDG_RUNTIME_DIR subdirectory", &dbus1, TRUE,
+                               error) ||
+      !ensure_owned_directory ("XDG_RUNTIME_DIR subdirectory", &services,
+                               TRUE, error))
+    goto out;
+
+  if (!_dbus_string_steal_data (&services, &data) ||
+      !_dbus_list_append (dirs, data))
+    {
+      _DBUS_SET_OOM (error);
+      goto out;
+    }
+
+  data = NULL;
+  ret = TRUE;
+
+out:
+  _dbus_string_free (&dbus1);
+  _dbus_string_free (&services);
+  _dbus_string_free (&xrd);
+  dbus_free (data);
+  return ret;
+}
 
 /**
  * Returns the standard directories for a session bus to look for service
