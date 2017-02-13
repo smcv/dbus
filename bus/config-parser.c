@@ -840,8 +840,8 @@ start_busconfig_child (BusConfigParser   *parser,
           return FALSE;
         }
 
-        while ((link = _dbus_list_pop_first_link (&dirs)))
-          service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
+      while ((link = _dbus_list_pop_first_link (&dirs)))
+        service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
 
       return TRUE;
     }
