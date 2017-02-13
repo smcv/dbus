@@ -821,9 +821,9 @@ start_busconfig_child (BusConfigParser   *parser,
     }
   else if (element_type == ELEMENT_STANDARD_SESSION_SERVICEDIRS)
     {
+      DBusError local_error = DBUS_ERROR_INIT;
+      DBusList *dirs = NULL;
       DBusList *link;
-      DBusList *dirs;
-      dirs = NULL;
 
       if (!check_no_attributes (parser, "standard_session_servicedirs", attribute_names, attribute_values, error))
         return FALSE;
@@ -834,6 +834,22 @@ start_busconfig_child (BusConfigParser   *parser,
           return FALSE;
         }
 
+      if (_dbus_set_up_transient_session_servicedirs (&dirs, &local_error))
+        {
+          while ((link = _dbus_list_pop_first_link (&dirs)))
+            service_dirs_append_link_unique_or_free (&parser->service_dirs,
+                                                     link);
+        }
+      else
+        {
+          /* Failing to set these up isn't fatal */
+          _dbus_warn ("Unable to set up transient service directory: %s",
+                      local_error.message);
+          dbus_error_free (&local_error);
+        }
+
+      _dbus_assert (dirs == NULL);
+
       if (!_dbus_get_standard_session_servicedirs (&dirs))
         {
           BUS_SET_OOM (error);
@@ -842,6 +858,8 @@ start_busconfig_child (BusConfigParser   *parser,
 
       while ((link = _dbus_list_pop_first_link (&dirs)))
         service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
+
+      _dbus_assert (dirs == NULL);
 
       return TRUE;
     }
