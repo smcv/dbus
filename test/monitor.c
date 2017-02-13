@@ -450,7 +450,7 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
 
   f->address = test_get_dbus_daemon (f->config ? f->config->config_file : NULL,
-      TEST_USER_ME, &f->daemon_pid);
+      TEST_USER_ME, NULL, &f->daemon_pid);
 
   if (f->address == NULL)
     return;

@@ -173,7 +173,7 @@ setup (Fixture *f,
     }
 
   f->address = test_get_dbus_daemon (config ? config->config_file : NULL,
-                                     TEST_USER_ME,
+                                     TEST_USER_ME, NULL,
                                      &f->daemon_pid);
 
   if (f->address == NULL)

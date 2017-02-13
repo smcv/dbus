@@ -69,6 +69,7 @@ void _test_assert_no_error (const DBusError *e,
 
 gchar *test_get_dbus_daemon (const gchar *config_file,
     TestUser user,
+    const gchar *runtime_dir,
     GPid *daemon_pid);
 
 DBusConnection *test_connect_to_bus (TestMainContext *ctx,

@@ -95,12 +95,14 @@ spawn_dbus_daemon (const gchar *binary,
     const gchar *configuration,
     const gchar *listen_address,
     TestUser user,
+    const gchar *runtime_dir,
     GPid *daemon_pid)
 {
   GError *error = NULL;
   GString *address;
   gint address_fd;
   GPtrArray *argv;
+  gchar **envp = g_get_environ ();
 #ifdef DBUS_UNIX
   const struct passwd *pwd = NULL;
 #endif
@@ -158,6 +160,9 @@ spawn_dbus_daemon (const gchar *binary,
 #endif
     }
 
+  if (runtime_dir != NULL)
+    envp = g_environ_setenv (envp, "XDG_RUNTIME_DIR", runtime_dir, TRUE);
+
   argv = g_ptr_array_new_with_free_func (g_free);
   g_ptr_array_add (argv, g_strdup (binary));
   g_ptr_array_add (argv, g_strdup (configuration));
@@ -175,7 +180,7 @@ spawn_dbus_daemon (const gchar *binary,
 
   g_spawn_async_with_pipes (NULL, /* working directory */
       (gchar **) argv->pdata,
-      NULL, /* envp */
+      envp,
       G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH,
 #ifdef DBUS_UNIX
       child_setup, (gpointer) pwd,
@@ -190,6 +195,7 @@ spawn_dbus_daemon (const gchar *binary,
   g_assert_no_error (error);
 
   g_ptr_array_free (argv, TRUE);
+  g_strfreev (envp);
 
   address = g_string_new (NULL);
 
@@ -228,6 +234,7 @@ spawn_dbus_daemon (const gchar *binary,
 gchar *
 test_get_dbus_daemon (const gchar *config_file,
                       TestUser     user,
+                      const gchar *runtime_dir,
                       GPid        *daemon_pid)
 {
   gchar *dbus_daemon;
@@ -296,7 +303,7 @@ test_get_dbus_daemon (const gchar *config_file,
   else
     {
       address = spawn_dbus_daemon (dbus_daemon, arg,
-          listen_address, user, daemon_pid);
+          listen_address, user, runtime_dir, daemon_pid);
     }
 
   g_free (dbus_daemon);

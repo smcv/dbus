@@ -247,7 +247,7 @@ setup (Fixture *f,
 
   f->address = test_get_dbus_daemon (
       "valid-config-files/systemd-activation.conf",
-      TEST_USER_ME, &f->daemon_pid);
+      TEST_USER_ME, NULL, &f->daemon_pid);
 
   if (f->address == NULL)
     return;
