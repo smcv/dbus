@@ -252,17 +252,6 @@ service_dirs_find_dir (DBusList **service_dirs,
   return FALSE;
 }
 
-static dbus_bool_t
-service_dirs_append_unique_or_free (DBusList **service_dirs,
-                                    char *dir)
-{
-  if (!service_dirs_find_dir (service_dirs, dir))
-    return _dbus_list_append (service_dirs, dir);  
-
-  dbus_free (dir);
-  return TRUE;
-}
-
 static void 
 service_dirs_append_link_unique_or_free (DBusList **service_dirs,
                                          DBusList *dir_link)
@@ -2601,7 +2590,8 @@ bus_config_parser_content (BusConfigParser   *parser,
       {
         char *s;
         DBusString full_path;
-        
+        DBusList *link;
+
         e->had_content = TRUE;
 
         if (!_dbus_string_init (&full_path))
@@ -2619,14 +2609,17 @@ bus_config_parser_content (BusConfigParser   *parser,
             goto nomem;
           }
 
-        /* _only_ extra session directories can be specified */
-        if (!service_dirs_append_unique_or_free (&parser->service_dirs, s))
+        link = _dbus_list_alloc_link (s);
+
+        if (link == NULL)
           {
             _dbus_string_free (&full_path);
             dbus_free (s);
             goto nomem;
           }
 
+        /* cannot fail */
+        service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
         _dbus_string_free (&full_path);
       }
       break;
