@@ -92,4 +92,7 @@ static inline void my_test_skip (const gchar *s)
 }
 #endif
 
+void test_remove_if_exists (const gchar *path);
+void test_rmdir_must_exist (const gchar *path);
+
 #endif

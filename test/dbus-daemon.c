@@ -1085,10 +1085,11 @@ teardown (Fixture *f,
 
       /* the socket may exist */
       path = g_strdup_printf ("%s/bus", f->tmp_runtime_dir);
-      g_assert (g_remove (path) == 0 || errno == ENOENT);
+
+      test_remove_if_exists (path);
       g_free (path);
       /* there shouldn't be anything else in there */
-      g_assert_cmpint (g_rmdir (f->tmp_runtime_dir), ==, 0);
+      test_rmdir_must_exist (f->tmp_runtime_dir);
 
       /* we're relying on being single-threaded for this to be safe */
       if (f->saved_runtime_dir != NULL)

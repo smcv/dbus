@@ -479,3 +479,44 @@ test_progress (char symbol)
   if (g_test_verbose () && isatty (1))
     g_print ("%c", symbol);
 }
+
+/*
+ * Delete @path, with a retry loop if the system call is interrupted by
+ * an async signal. If @path does not exist, ignore; otherwise, it is
+ * required to be a non-directory.
+ */
+void
+test_remove_if_exists (const gchar *path)
+{
+  while (g_remove (path) != 0)
+    {
+      int saved_errno = errno;
+
+      if (saved_errno == ENOENT)
+        return;
+
+      if (saved_errno == EINTR)
+        continue;
+
+      g_error ("Unable to remove file \"%s\": %s", path, g_strerror (errno));
+    }
+}
+
+/*
+ * Delete empty directory @path, with a retry loop if the system call is
+ * interrupted by an async signal. @path is required to exist.
+ */
+void
+test_rmdir_must_exist (const gchar *path)
+{
+  while (g_remove (path) != 0)
+    {
+      int saved_errno = errno;
+
+      if (saved_errno == EINTR)
+        continue;
+
+      g_error ("Unable to remove directory \"%s\": %s", path,
+               g_strerror (errno));
+    }
+}
