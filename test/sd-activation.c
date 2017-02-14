@@ -34,6 +34,8 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include <glib/gstdio.h>
+
 #if defined(HAVE_APPARMOR_2_10) && defined(DBUS_TEST_APPARMOR_ACTIVATION)
 #include <sys/apparmor.h>
 #endif
@@ -62,6 +64,8 @@ typedef struct {
     const char *activated_name;
     DBusMessage *activated_message;
     dbus_bool_t activated_filter_added;
+
+    gchar *tmp_runtime_dir;
 } Fixture;
 
 typedef struct
@@ -211,6 +215,16 @@ static void
 setup (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+  aa_features *features;
+#endif
+
+  f->ge = NULL;
+  dbus_error_init (&f->e);
+
+  f->tmp_runtime_dir = g_dir_make_tmp ("dbus-daemon-test.XXXXXX", &f->ge);
+  g_assert_no_error (f->ge);
+
 #if defined(DBUS_TEST_APPARMOR_ACTIVATION) && !defined(HAVE_APPARMOR_2_10)
 
   g_test_skip ("AppArmor support not compiled or AppArmor 2.10 unavailable");
@@ -219,8 +233,6 @@ setup (Fixture *f,
 #else
 
 #if defined(DBUS_TEST_APPARMOR_ACTIVATION)
-  aa_features *features;
-
   if (!aa_is_enabled ())
     {
       g_test_message ("aa_is_enabled() -> %s", g_strerror (errno));
@@ -247,12 +259,9 @@ setup (Fixture *f,
 
   f->ctx = test_main_context_get ();
 
-  f->ge = NULL;
-  dbus_error_init (&f->e);
-
   f->address = test_get_dbus_daemon (
       "valid-config-files/systemd-activation.conf",
-      TEST_USER_ME, NULL, &f->daemon_pid);
+      TEST_USER_ME, f->tmp_runtime_dir, &f->daemon_pid);
 
   if (f->address == NULL)
     return;
@@ -820,6 +829,13 @@ teardown (Fixture *f,
     test_main_context_unref (f->ctx);
 
   g_free (f->address);
+
+  if (f->tmp_runtime_dir != NULL)
+    {
+      test_rmdir_if_exists (f->tmp_runtime_dir);
+
+      g_free (f->tmp_runtime_dir);
+    }
 }
 
 static const Config deny_send_tests[] =
