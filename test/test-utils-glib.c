@@ -561,3 +561,23 @@ test_rmdir_if_exists (const gchar *path)
                g_strerror (errno));
     }
 }
+
+/*
+ * Create directory @path, with a retry loop if the system call is
+ * interrupted by an async signal.
+ */
+void
+test_mkdir (const gchar *path,
+            gint mode)
+{
+  while (g_mkdir (path, mode) != 0)
+    {
+      int saved_errno = errno;
+
+      if (saved_errno == EINTR)
+        continue;
+
+      g_error ("Unable to create directory \"%s\": %s", path,
+               g_strerror (errno));
+    }
+}

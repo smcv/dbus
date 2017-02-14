@@ -65,12 +65,20 @@ typedef struct {
     DBusMessage *activated_message;
     dbus_bool_t activated_filter_added;
 
+    gchar *transient_service_file;
     gchar *tmp_runtime_dir;
 } Fixture;
+
+typedef enum
+{
+  FLAG_EARLY_TRANSIENT_SERVICE = (1 << 0),
+  FLAG_NONE = 0
+} Flags;
 
 typedef struct
 {
   const gchar *bus_name;
+  Flags flags;
 } Config;
 
 /* this is a macro so it gets the right line number */
@@ -187,6 +195,10 @@ activated_filter (DBusConnection *connection,
   g_assert (f->activated_message == NULL);
   f->activated_message = dbus_message_ref (message);
 
+  /* Test code is expected to reply to method calls itself */
+  if (dbus_message_get_type (message) == DBUS_MESSAGE_TYPE_METHOD_CALL)
+    return DBUS_HANDLER_RESULT_HANDLED;
+
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
@@ -212,9 +224,34 @@ caller_filter (DBusConnection *connection,
 }
 
 static void
-setup (Fixture *f,
-    gconstpointer context G_GNUC_UNUSED)
+fixture_create_transient_service (Fixture *f,
+                                  const gchar *name)
 {
+  gchar *service;
+  gchar *content;
+  gboolean ok;
+
+  service = g_strdup_printf ("%s.service", name);
+  f->transient_service_file = g_build_filename (f->tmp_runtime_dir, "dbus-1",
+      "services", service, NULL);
+  g_free (service);
+
+  content = g_strdup_printf (
+      "[D-BUS Service]\n"
+      "Name=%s\n"
+      "Exec=/bin/false %s\n"
+      "SystemdService=dbus-%s.service\n", name, name, name);
+  ok = g_file_set_contents (f->transient_service_file, content, -1, &f->ge);
+  g_assert_no_error (f->ge);
+  g_assert (ok);
+  g_free (content);
+}
+
+static void
+setup (Fixture *f,
+       gconstpointer context)
+{
+  const Config *config = context;
 #if defined(DBUS_TEST_APPARMOR_ACTIVATION)
   aa_features *features;
 #endif
@@ -224,6 +261,19 @@ setup (Fixture *f,
 
   f->tmp_runtime_dir = g_dir_make_tmp ("dbus-daemon-test.XXXXXX", &f->ge);
   g_assert_no_error (f->ge);
+
+  if (config != NULL && (config->flags & FLAG_EARLY_TRANSIENT_SERVICE) != 0)
+    {
+      gchar *dbus1 = g_build_filename (f->tmp_runtime_dir, "dbus-1", NULL);
+      gchar *services = g_build_filename (dbus1, "services", NULL);
+
+      /* We just created it so the directories shouldn't exist yet */
+      test_mkdir (dbus1, 0700);
+      test_mkdir (services, 0700);
+      fixture_create_transient_service (f, config->bus_name);
+      g_free (dbus1);
+      g_free (services);
+    }
 
 #if defined(DBUS_TEST_APPARMOR_ACTIVATION) && !defined(HAVE_APPARMOR_2_10)
 
@@ -782,6 +832,170 @@ test_deny_receive (Fixture *f,
   g_assert (f->activated_message == NULL);
 }
 
+/*
+ * Test that we can set up transient services.
+ *
+ * If flags & FLAG_EARLY_TRANSIENT_SERVICE, we assert that a service that
+ * was deployed before starting systemd (in setup()) is available.
+ *
+ * Otherwise, we assert that a service that is deployed while dbus-daemon
+ * is already running becomes available after reloading the dbus-daemon
+ * configuration.
+ */
+static void
+test_transient_services (Fixture *f,
+    gconstpointer context G_GNUC_UNUSED)
+{
+  const Config *config = context;
+  DBusMessage *m = NULL;
+  DBusMessage *send_reply = NULL;
+  DBusMessage *reply = NULL;
+  DBusPendingCall *pc;
+
+  if (f->address == NULL)
+    return;
+
+  /* Connect the fake systemd to the bus. */
+  f->systemd = test_connect_to_bus (f->ctx, f->address);
+  if (!dbus_connection_add_filter (f->systemd, systemd_filter, f, NULL))
+    g_error ("OOM");
+  f->systemd_filter_added = TRUE;
+  f->systemd_name = dbus_bus_get_unique_name (f->systemd);
+  take_well_known_name (f, f->systemd, "org.freedesktop.systemd1");
+
+  if (config == NULL || (config->flags & FLAG_EARLY_TRANSIENT_SERVICE) == 0)
+    {
+      /* Try to activate a service that isn't there. */
+      m = dbus_message_new_method_call (config->bus_name,
+                                        "/foo", "com.example.bar", "Activate");
+
+      if (m == NULL ||
+          !dbus_connection_send_with_reply (f->caller, m, &pc,
+            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
+        g_error ("OOM");
+
+      dbus_message_unref (m);
+      m = NULL;
+
+      /* It fails. */
+
+      if (dbus_pending_call_get_completed (pc))
+        test_pending_call_store_reply (pc, &reply);
+      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+            &m, NULL))
+        g_error ("OOM");
+
+      while (m == NULL)
+        test_main_context_iterate (f->ctx, TRUE);
+
+      assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
+          DBUS_ERROR_SERVICE_UNKNOWN);
+
+      dbus_message_unref (m);
+      m = NULL;
+
+      /* Now generate a transient D-Bus service file for it. The directory
+       * should have been created during dbus-daemon startup, so we don't have to
+       * recreate it. */
+      fixture_create_transient_service (f, config->bus_name);
+
+      /* To guarantee that the transient service has been picked up, we have
+       * to reload. */
+
+      m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+                                        DBUS_INTERFACE_DBUS, "ReloadConfig");
+
+      if (m == NULL ||
+          !dbus_connection_send_with_reply (f->caller, m, &pc,
+            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
+        g_error ("OOM");
+
+      dbus_message_unref (m);
+      m = NULL;
+
+      if (dbus_pending_call_get_completed (pc))
+        test_pending_call_store_reply (pc, &m);
+      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+            &m, NULL))
+        g_error ("OOM");
+
+      while (m == NULL)
+        test_main_context_iterate (f->ctx, TRUE);
+
+      assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
+      dbus_message_unref (m);
+      m = NULL;
+    }
+
+  /* The service is present now. */
+  m = dbus_message_new_method_call (config->bus_name,
+                                    "/foo", "com.example.bar", "Activate");
+
+  if (m == NULL ||
+      !dbus_connection_send_with_reply (f->caller, m, &pc,
+        DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
+    g_error ("OOM");
+
+  dbus_message_unref (m);
+  m = NULL;
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &reply);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+        &reply, NULL))
+    g_error ("OOM");
+
+  /* The mock systemd is told to start the service. */
+  while (f->systemd_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->systemd_message;
+  f->systemd_message = NULL;
+  assert_signal (m, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+      "org.freedesktop.systemd1.Activator", "ActivationRequest", "s",
+      "org.freedesktop.systemd1");
+  dbus_message_unref (m);
+  m = NULL;
+
+  /* The activatable service connects and gets its name. */
+  f->activated = test_connect_to_bus (f->ctx, f->address);
+  if (!dbus_connection_add_filter (f->activated, activated_filter,
+        f, NULL))
+    g_error ("OOM");
+  f->activated_filter_added = TRUE;
+  f->activated_name = dbus_bus_get_unique_name (f->activated);
+  take_well_known_name (f, f->activated, config->bus_name);
+
+  /* The message is delivered to the activatable service. */
+  while (f->activated_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->activated_message;
+  f->activated_message = NULL;
+  assert_method_call (m, f->caller_name, config->bus_name, "/foo",
+      "com.example.bar", "Activate", "");
+
+  /* The activatable service sends back a reply. */
+  send_reply = dbus_message_new_method_return (m);
+
+  if (send_reply == NULL ||
+      !dbus_connection_send (f->activated, send_reply, NULL))
+    g_error ("OOM");
+
+  dbus_message_unref (send_reply);
+  send_reply = NULL;
+  dbus_message_unref (m);
+  m = NULL;
+
+  /* The caller receives the reply. */
+  while (reply == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  assert_method_reply (reply, f->activated_name, f->caller_name, "");
+  dbus_message_unref (reply);
+  reply = NULL;
+}
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -830,11 +1044,24 @@ teardown (Fixture *f,
 
   g_free (f->address);
 
+  if (f->transient_service_file != NULL)
+    {
+      test_remove_if_exists (f->transient_service_file);
+      g_free (f->transient_service_file);
+    }
+
   if (f->tmp_runtime_dir != NULL)
     {
+      gchar *dbus1 = g_build_filename (f->tmp_runtime_dir, "dbus-1", NULL);
+      gchar *services = g_build_filename (dbus1, "services", NULL);
+
+      test_rmdir_if_exists (services);
+      test_rmdir_if_exists (dbus1);
       test_rmdir_if_exists (f->tmp_runtime_dir);
 
       g_free (f->tmp_runtime_dir);
+      g_free (dbus1);
+      g_free (services);
     }
 }
 
@@ -854,6 +1081,18 @@ static const Config deny_receive_tests[] =
     { "com.example.ReceiveDeniedByAppArmorLabel" },
 #endif
     { "com.example.ReceiveDenied" }
+};
+
+static const Config transient_service_later =
+{
+  "com.example.TransientActivatable1",
+  FLAG_NONE
+};
+
+static const Config transient_service_in_advance =
+{
+  "com.example.TransientActivatable1",
+  FLAG_EARLY_TRANSIENT_SERVICE
 };
 
 int
@@ -888,6 +1127,11 @@ main (int argc,
                   setup, test_deny_receive, teardown);
       g_free (name);
     }
+
+  g_test_add ("/sd-activation/transient-services/later", Fixture,
+      &transient_service_later, setup, test_transient_services, teardown);
+  g_test_add ("/sd-activation/transient-services/in-advance", Fixture,
+      &transient_service_in_advance, setup, test_transient_services, teardown);
 
   return g_test_run ();
 }

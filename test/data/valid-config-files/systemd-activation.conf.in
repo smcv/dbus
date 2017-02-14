@@ -2,7 +2,9 @@
  "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
 <busconfig>
   <listen>@TEST_LISTEN@</listen>
+
   <servicedir>@DBUS_TEST_DATA@/systemd-activation</servicedir>
+  <standard_session_servicedirs />
 
   <policy context="default">
     <allow send_destination="*"/>
