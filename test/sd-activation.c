@@ -64,6 +64,11 @@ typedef struct {
     dbus_bool_t activated_filter_added;
 } Fixture;
 
+typedef struct
+{
+  const gchar *bus_name;
+} Config;
+
 /* this is a macro so it gets the right line number */
 #define assert_signal(m, \
     sender, path, iface, member, signature, \
@@ -624,7 +629,10 @@ test_deny_send (Fixture *f,
     gconstpointer context)
 {
   DBusMessage *m;
-  const char *bus_name = context;
+  const Config *config = context;
+
+  g_assert (config != NULL);
+  g_assert (config->bus_name != NULL);
 
   if (f->address == NULL)
     return;
@@ -635,7 +643,7 @@ test_deny_send (Fixture *f,
   f->caller_filter_added = TRUE;
 
   /* The sender sends a message to an activatable service. */
-  m = dbus_message_new_method_call (bus_name, "/foo",
+  m = dbus_message_new_method_call (config->bus_name, "/foo",
       "com.example.bar", "Call");
   if (m == NULL)
     g_error ("OOM");
@@ -673,7 +681,7 @@ test_deny_receive (Fixture *f,
     gconstpointer context)
 {
   DBusMessage *m;
-  const char *bus_name = context;
+  const Config *config = context;
 
   if (f->address == NULL)
     return;
@@ -686,7 +694,8 @@ test_deny_receive (Fixture *f,
   /* The sender sends a message to an activatable service.
    * We set the interface name equal to the bus name to make it
    * easier to write the necessary policy rules. */
-  m = dbus_message_new_method_call (bus_name, "/foo", bus_name, "Call");
+  m = dbus_message_new_method_call (config->bus_name, "/foo",
+                                    config->bus_name, "Call");
   if (m == NULL)
     g_error ("OOM");
 
@@ -716,9 +725,9 @@ test_deny_receive (Fixture *f,
 
 #if defined(DBUS_TEST_APPARMOR_ACTIVATION) && defined(HAVE_APPARMOR_2_10)
   /* The use of 42 here is arbitrary, see setup(). */
-  if (aa_change_hat (bus_name, 42) != 0)
+  if (aa_change_hat (config->bus_name, 42) != 0)
     g_error ("Unable to change profile to ...//^%s: %s",
-             bus_name, g_strerror (errno));
+             config->bus_name, g_strerror (errno));
 #endif
 
   f->activated = test_connect_to_bus (f->ctx, f->address);
@@ -727,7 +736,7 @@ test_deny_receive (Fixture *f,
     g_error ("OOM");
   f->activated_filter_added = TRUE;
   f->activated_name = dbus_bus_get_unique_name (f->activated);
-  take_well_known_name (f, f->activated, bus_name);
+  take_well_known_name (f, f->activated, config->bus_name);
 
 #if defined(DBUS_TEST_APPARMOR_ACTIVATION) && defined(HAVE_APPARMOR_2_10)
   if (aa_change_hat (NULL, 42) != 0)
@@ -813,37 +822,56 @@ teardown (Fixture *f,
   g_free (f->address);
 }
 
+static const Config deny_send_tests[] =
+{
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+    { "com.example.SendDeniedByAppArmorLabel" },
+    { "com.example.SendDeniedByNonexistentAppArmorLabel" },
+    { "com.example.SendDeniedByAppArmorName" },
+#endif
+    { "com.example.SendDenied" }
+};
+
+static const Config deny_receive_tests[] =
+{
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+    { "com.example.ReceiveDeniedByAppArmorLabel" },
+#endif
+    { "com.example.ReceiveDenied" }
+};
+
 int
 main (int argc,
     char **argv)
 {
+  gsize i;
+
   test_init (&argc, &argv);
 
   g_test_add ("/sd-activation/activation", Fixture, NULL,
       setup, test_activation, teardown);
   g_test_add ("/sd-activation/uae", Fixture, NULL,
       setup, test_uae, teardown);
-  g_test_add ("/sd-activation/deny-send", Fixture,
-      "com.example.SendDenied",
-      setup, test_deny_send, teardown);
-  g_test_add ("/sd-activation/deny-receive", Fixture,
-      "com.example.ReceiveDenied",
-      setup, test_deny_receive, teardown);
 
-#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
-  g_test_add ("/sd-activation/apparmor/deny-send/by-label", Fixture,
-      "com.example.SendDeniedByAppArmorLabel",
-      setup, test_deny_send, teardown);
-  g_test_add ("/sd-activation/apparmor/deny-send/by-nonexistent-label", Fixture,
-      "com.example.SendDeniedByNonexistentAppArmorLabel",
-      setup, test_deny_send, teardown);
-  g_test_add ("/sd-activation/apparmor/deny-send/by-name", Fixture,
-      "com.example.SendDeniedByAppArmorName",
-      setup, test_deny_send, teardown);
-  g_test_add ("/sd-activation/apparmor/deny-receive/by-label", Fixture,
-      "com.example.ReceiveDeniedByAppArmorLabel",
-      setup, test_deny_receive, teardown);
-#endif
+  for (i = 0; i < G_N_ELEMENTS (deny_send_tests); i++)
+    {
+      gchar *name = g_strdup_printf ("/sd-activation/deny-send/%s",
+                                     deny_send_tests[i].bus_name);
+
+      g_test_add (name, Fixture, &deny_send_tests[i],
+                  setup, test_deny_send, teardown);
+      g_free (name);
+    }
+
+  for (i = 0; i < G_N_ELEMENTS (deny_receive_tests); i++)
+    {
+      gchar *name = g_strdup_printf ("/sd-activation/deny-receive/%s",
+                                     deny_receive_tests[i].bus_name);
+
+      g_test_add (name, Fixture, &deny_receive_tests[i],
+                  setup, test_deny_receive, teardown);
+      g_free (name);
+    }
 
   return g_test_run ();
 }
