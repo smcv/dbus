@@ -416,9 +416,25 @@ test_connect_to_bus_as_user (TestMainContext *ctx,
 #endif
 }
 
+static void
+pid_died (GPid pid,
+          gint status,
+          gpointer user_data)
+{
+  gboolean *result = user_data;
+
+  g_assert (result != NULL);
+  g_assert (!*result);
+  *result = TRUE;
+}
+
 void
 test_kill_pid (GPid pid)
 {
+  gint died = FALSE;
+
+  g_child_watch_add (pid, pid_died, &died);
+
 #ifdef DBUS_WIN
   if (pid != NULL)
     TerminateProcess (pid, 1);
@@ -426,6 +442,9 @@ test_kill_pid (GPid pid)
   if (pid > 0)
     kill (pid, SIGTERM);
 #endif
+
+  while (!died)
+    g_main_context_iteration (NULL, TRUE);
 }
 
 static gboolean
