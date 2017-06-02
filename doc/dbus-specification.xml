@@ -6416,6 +6416,44 @@
                 </entry>
               </row>
 
+              <row>
+                <entry>org.freedesktop.DBus.Containers1.Instance</entry>
+                <entry>OBJECT_PATH</entry>
+                <entry>
+                  The container instance object path of the server through
+                  which this connection is connected, as returned by
+                  <literal>AddServer</literal>. Omitted from the
+                  dictionary if this connection is not via a container's
+                  server.
+                </entry>
+              </row>
+
+              <row>
+                <entry>org.freedesktop.DBus.Containers1.Type</entry>
+                <entry>STRING</entry>
+                <entry>
+                  The container technology that created the container
+                  instance, as passed to <literal>AddServer</literal>.
+                  Omitted from the dictionary if this connection is not
+                  via a container's server. For example, a typical value
+                  for a Flatpak application would be
+                  <literal>org.flatpak</literal>.
+                </entry>
+              </row>
+
+              <row>
+                <entry>org.freedesktop.DBus.Containers1.Name</entry>
+                <entry>STRING</entry>
+                <entry>
+                  The contained app name for the container instance,
+                  as passed to <literal>AddServer</literal>. Omitted
+                  from the dictionary if this connection is not via a
+                  container's server. For example, a typical value for
+                  a Flatpak application would be
+                  <literal>org.gnome.Weather</literal>.
+                </entry>
+              </row>
+
             </tbody>
           </tgroup>
         </informaltable>
@@ -6644,6 +6682,520 @@
         There is also a per-machine ID, described in <xref linkend="standard-interfaces-peer"/> and returned
         by org.freedesktop.DBus.Peer.GetMachineId().
         For a desktop session bus, the bus ID can be used as a way to uniquely identify a user's session.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-add-server">
+        <title><literal>org.freedesktop.DBus.Containers1.AddServer</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            AddServer (in STRING container_type,
+                       in STRING container_name,
+                       in DICT&lt;STRING,VARIANT&gt; metadata,
+                       in DICT&lt;STRING,VARIANT&gt; named_arguments,
+                       out OBJECT_PATH container_instance,
+                       out ARRAY&lt;BYTE&gt; socket_path,
+                       out STRING connectable_address)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Reversed domain name identifying a container manager
+                    or container technology, such as
+                    <literal>org.flatpak</literal> or
+                    <literal>io.snapcraft</literal>. It must follow the
+                    same syntactic rules as a
+                    <link linkend="message-protocol-names-interface">D-Bus
+                      interface name</link>.
+                  </entry>
+                </row>
+                <row>
+                  <entry>1</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Some unique identifier for an application or
+                    container, whose meaning is defined by the
+                    maintainers of the container type. If the container
+                    type does not have a concept of identifying or
+                    naming its applications or containers by a string,
+                    using the empty string here is suggested.
+                  </entry>
+                </row>
+                <row>
+                  <entry>2</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
+                  <entry>
+                    Metadata describing the application or container, with the
+                    keys and values defined by the maintainers of the container
+                    type.
+                  </entry>
+                </row>
+                <row>
+                  <entry>3</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
+                  <entry>
+                    Additional arguments that extend this method.
+                    The only named arguments that are allowed are the ones
+                    listed in the
+                    <literal>org.freedesktop.DBus.Containers1.SupportedArguments</literal>
+                    property. All other named arguments are an error.
+                  </entry>
+                </row>
+                <row>
+                  <entry>4</entry>
+                  <entry>OBJECT_PATH</entry>
+                  <entry>
+                    An opaque object path identifying the new container
+                    instance.
+                  </entry>
+                </row>
+                <row>
+                  <entry>5</entry>
+                  <entry>ARRAY&lt;BYTE&gt;</entry>
+                  <entry>
+                    The absolute filesystem path of the resulting
+                    <literal>AF_UNIX</literal> socket, followed by a single
+                    zero (nul) byte, for example
+                    <literal>/run/user/1000/dbus-12345vwxyz\x00</literal>
+                    where \x00 represents the terminating zero byte.
+                  </entry>
+                </row>
+                <row>
+                  <entry>6</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    A connectable D-Bus address, for example
+                    <literal>unix:path=/run/user/1000/dbus-12345vwxyz</literal>.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          Set up a new server socket for use in an application container.
+          Clients can connect to that socket, and the result will be as
+          though they had connected to the message bus, with a few differences.
+          The intention is that a container manager will call this method
+          to get a new server socket, bind-mount the server socket
+          into a location that is accessible by the confined (sandboxed)
+          application, and ensure that the normal message bus socket is
+          <emphasis>not</emphasis> accessible by the confined application.
+        </para>
+
+        <para>
+          Each call to this method creates a new
+          <firstterm>container instance</firstterm>, identified by an object
+          path. Even if the specified container type and name are the
+          same as for a pre-existing container instance, each call
+          creates a new server with a new unique object path, because
+          the new container instance might represent a different
+          version of the confined application with different
+          characteristics and restrictions. The message bus may provide
+          an object at the given object path, but is not required to
+          do so.
+        </para>
+
+        <para>
+          Metadata from the first three arguments is stored by the message
+          bus, but not interpreted; software that interacts with the
+          container manager can use this metadata.
+          <!-- TODO: Clarify how the trust model works here. See
+          <https://bugs.freedesktop.org/show_bug.cgi?id=100344#c15>-->
+          The method call may fail with the error
+          <literal>org.freedesktop.DBus.Error.LimitsExceeded</literal>
+          if the caller provides more metadata than the message bus
+          is willing to store.
+        </para>
+
+        <para>
+          The last argument (the <firstterm>named arguments</firstterm>)
+          will be used in future versions of this specification to modify
+          the behaviour of this method call; all keys in this dictionary not
+          containing <literal>.</literal> are reserved by this specification
+          for this purpose. It can also contain implementation-specific
+          arguments for a particular message bus implementation, which
+          should start with a reversed domain name in the same way as
+          interface names. For example, GLib's gdbus-daemon might use
+          <literal>org.gtk.GDBus.SomeArgument</literal> if it used this
+          extension point.
+        </para>
+
+        <para>
+          In the most basic form of a call to this method, the new server
+          socket is an <literal>AF_UNIX</literal> socket at a path chosen
+          by the message bus and returned from the method. Future versions
+          of this specification are likely to provide a way for the
+          message bus implementation to receive a socket from the caller
+          and arrange for it to listen for connections, using the named
+          arguments dictionary.
+        </para>
+
+        <para>
+          Connections to the new server socket are said to be
+          <firstterm>confined</firstterm>. The message bus may prevent
+          confined connections from calling certain security-sensitive methods,
+          and may apply lower limits to these connections. However, container
+          managers and services must not rely on confined connections having
+          any particular filtering applied to them by the message bus.
+        </para>
+
+        <para>
+          In the most basic form of a call to this method, the server
+          socket will cease to listen for new connections (in the same
+          way as if <literal>StopListening</literal> had been called
+          successfully) when the caller of this method disconnects from
+          the bus. Any confined connections that are already active are
+          unaffected. Future versions of this specification are likely
+          to provide a way for the caller to alter this behaviour by
+          specifying named arguments.
+        </para>
+
+        <para>
+          The container instance object path remains valid for as
+          long as one or more confined connection via the same server
+          socket remain open, or there is a way for the server socket
+          to produce new connections in future (in other words,
+          either it is preparing to listen for new connections, or
+          it is currently listening for new connections). When the
+          container instance has ceased to listen for new connections
+          and no longer has any confined connections, the object path
+          becomes invalid, and API calls that specify it will fail with
+          the <literal>org.freedesktop.DBus.Error.NotContainer</literal>
+          error.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-stop-instance">
+        <title><literal>org.freedesktop.DBus.Containers1.StopInstance</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            StopInstance (in OBJECT_PATH container_instance)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>OBJECT_PATH</entry>
+                  <entry>
+                    The opaque object path that was returned from the
+                    <literal>AddServer</literal> method, identifying a
+                    container instance.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          Terminate the container instance. The server will stop
+          listening for new connections, and any existing connections to
+          that server will be disconnected. When all connections have
+          been disconnected, the instance will cease to exist.
+        </para>
+        <para>
+          If the given object path does not represent a valid container
+          instance (see
+          <xref linkend="bus-messages-containers1-add-server"/>), the
+          <literal>org.freedesktop.DBus.Error.NotContainer</literal>
+          error is returned. In particular, if this method is called
+          twice, the second call will fail in this way.
+        </para>
+        <para>
+          If the given container instance exists but the caller of this
+          method is not allowed to stop it (for example because the
+          caller is in a container instance or because its user ID does
+          not match the user ID of the creator of the container
+          instance),
+          the <literal>org.freedesktop.DBus.Error.AccessDenied</literal>
+          error is returned and nothing is stopped.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-stop-listening">
+        <title><literal>org.freedesktop.DBus.Containers1.StopListening</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            StopListening (in OBJECT_PATH container_instance)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>OBJECT_PATH</entry>
+                  <entry>
+                    The opaque object path that was returned from the
+                    <literal>AddServer</literal> method, identifying a
+                    container instance.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          Stop listening for new connections to the server in the given
+          container instance, but do not disconnect any existing
+          connections.
+        </para>
+        <para>
+          If this method is called more than once, while the container
+          instance still exists because connections to it are still
+          open, the second and subsequent calls will be successful but
+          will have no practical effect.
+        </para>
+        <para>
+          If the given object path does not represent a valid container
+          instance (see
+          <xref linkend="bus-messages-containers1-add-server"/>), the
+          <literal>org.freedesktop.DBus.Error.NotContainer</literal>
+          error is returned. In particular, this will happen if the
+          container instance already stopped listening, and all
+          connections to it (if any) were already closed.
+        </para>
+        <para>
+          If the given container instance exists but the caller of this
+          method is not allowed to stop it (for example because the
+          caller is in a container instance or because its user ID does
+          not match the user ID of the creator of the container
+          instance),
+          the <literal>org.freedesktop.DBus.Error.AccessDenied</literal>
+          error is returned and nothing is stopped.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-get-connection-instance">
+        <title><literal>org.freedesktop.DBus.Containers1.GetConnectionInstance</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            GetConnectionInstance (in STRING bus_name,
+                                   out OBJECT_PATH container_instance,
+                                   out STRING container_type,
+                                   out STRING container_name,
+                                   out DICT&lt;STRING,VARIANT&gt; metadata)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Unique or well-known bus name of the connection to
+                    query, such as <literal>:12.34</literal> or
+                    <literal>com.example.tea</literal>.
+                  </entry>
+                </row>
+                <row>
+                  <entry>1</entry>
+                  <entry>OBJECT_PATH</entry>
+                  <entry>
+                    The opaque object path that was returned from the
+                    <literal>AddServer</literal> method, identifying a
+                    container instance.
+                  </entry>
+                </row>
+                <row>
+                  <entry>2</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Reversed domain name identifying a container
+                    manager or container technology, as passed to the
+                    <literal>AddServer</literal> method, such as
+                    <literal>org.flatpak</literal> or
+                    <literal>io.snapcraft</literal>.
+                  </entry>
+                </row>
+                <row>
+                  <entry>3</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Some unique identifier for an application or container,
+                    whose meaning is defined by the maintainers of the
+                    container type.
+                  </entry>
+                </row>
+                <row>
+                  <entry>4</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
+                  <entry>
+                    Metadata describing the application or container, with the
+                    keys and values defined by the maintainers of the container
+                    type.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          If the given unique or well-known bus name is a connection to a
+          container server, return information about that container instance.
+          If the bus name exists but is not confined (in other words, if it
+          is a direct connection to the main message bus socket), the
+          <literal>org.freedesktop.DBus.Error.NotContainer</literal> error
+          is returned instead. If the given bus name has no owner at all, the
+          <literal>org.freedesktop.DBus.Error.NameHasNoOwner</literal> error
+          is returned instead.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-get-instance-info">
+        <title><literal>org.freedesktop.DBus.Containers1.GetInstanceInfo</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            GetInstanceInfo (in OBJECT_PATH container_instance,
+                             out STRING container_type,
+                             out STRING container_name,
+                             out DICT&lt;STRING,VARIANT&gt; metadata)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>OBJECT_PATH</entry>
+                  <entry>
+                    The opaque object path that was returned from the
+                    <literal>AddServer</literal> method, identifying a
+                    container instance.
+                  </entry>
+                </row>
+                <row>
+                  <entry>1</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Reversed domain name identifying a container
+                    manager or container technology, as passed to the
+                    <literal>AddServer</literal> method, such as
+                    <literal>org.flatpak</literal> or
+                    <literal>io.snapcraft</literal>.
+                  </entry>
+                </row>
+                <row>
+                  <entry>2</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Some unique identifier for an application or container,
+                    whose meaning is defined by the maintainers of the
+                    container type.
+                  </entry>
+                </row>
+                <row>
+                  <entry>3</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
+                  <entry>
+                    Metadata describing the application or container, with the
+                    keys and values defined by the maintainers of the container
+                    type.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          If the given object path represents a valid container instance,
+          (see <xref linkend="bus-messages-containers1-add-server"/>),
+          return information about it. Otherwise, the
+          <literal>org.freedesktop.DBus.Error.NotContainer</literal> error
+          is returned.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-instance-removed">
+        <title><literal>org.freedesktop.DBus.Containers1.InstanceRemoved</literal></title>
+        <para>
+          As a signal emitted by the message bus:
+          <programlisting>
+            InstanceRemoved (OBJECT_PATH container_instance)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>OBJECT_PATH</entry>
+                  <entry>
+                    The opaque object path that was returned from the
+                    <literal>AddServer</literal> method, identifying a
+                    container instance.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          Emitted when a container instance ceases to exist. A container
+          instance continues to exist as long as it is listening for
+          new connections, or as long as connections to the instance
+          are open, whichever is longer.
         </para>
       </sect3>
 
