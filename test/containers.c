@@ -113,6 +113,91 @@ test_get_supported_arguments (Fixture *f,
 #endif /* !DBUS_ENABLE_CONTAINERS */
 }
 
+/*
+ * Assert that named arguments are validated: passing an unsupported
+ * named argument causes an error.
+ */
+static void
+test_unsupported_parameter (Fixture *f,
+                            gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GVariant *tuple;
+  GVariant *parameters;
+  GVariantDict named_argument_builder;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_variant_dict_init (&named_argument_builder, NULL);
+  g_variant_dict_insert (&named_argument_builder,
+                         "ThisArgumentIsntImplemented",
+                         "b", FALSE);
+
+  parameters = g_variant_new ("(ssa{sv}@a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              g_variant_dict_end (&named_argument_builder));
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer",
+                                  g_steal_pointer (&parameters),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
+ * Assert that container types are validated: a container type (container
+ * technology) that is not a syntactically valid D-Bus interface name
+ * causes an error.
+ */
+static void
+test_invalid_type_name (Fixture *f,
+                        gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GVariant *tuple;
+  GVariant *parameters;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "this is not a valid container type name",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer",
+                                  g_steal_pointer (&parameters),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -152,6 +237,10 @@ main (int argc,
 
   g_test_add ("/containers/get-supported-arguments", Fixture, NULL,
               setup, test_get_supported_arguments, teardown);
+  g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
+              setup, test_unsupported_parameter, teardown);
+  g_test_add ("/containers/invalid-type-name", Fixture, NULL,
+              setup, test_invalid_type_name, teardown);
 
   return g_test_run ();
 }
