@@ -370,6 +370,8 @@ test_no_reply (Fixture *f,
   else
     g_assert_cmpstr (f->e.message, ==,
         "Message did not receive a reply (timeout by message bus)");
+
+  dbus_message_unref (reply);
 }
 
 static void
@@ -529,6 +531,9 @@ test_creds (Fixture *f,
 #ifdef G_OS_WIN32
   g_assert (seen & SEEN_WINDOWS_SID);
 #endif
+
+  dbus_message_unref (m);
+  dbus_pending_call_unref (pc);
 }
 
 static void
@@ -599,6 +604,9 @@ test_processid (Fixture *f,
     {
       g_error ("Unexpected error: %s: %s", error.name, error.message);
     }
+
+  dbus_message_unref (m);
+  dbus_pending_call_unref (pc);
 }
 
 static void
@@ -644,6 +652,8 @@ test_canonical_path_uae (Fixture *f,
       DBUS_MESSAGE_TYPE_METHOD_RETURN);
 
   dbus_message_unref (m);
+  dbus_pending_call_unref (pc);
+  pc = NULL;
 
   /* Now try with the wrong object path */
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
@@ -684,6 +694,7 @@ test_canonical_path_uae (Fixture *f,
   g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
 
   dbus_message_unref (m);
+  dbus_pending_call_unref (pc);
 }
 
 static void
@@ -815,6 +826,7 @@ test_max_replies_per_connection (Fixture *f,
         g_error ("OOM");
 
       dbus_message_unref (reply);
+      dbus_message_unref (m);
     }
 
   /* Wait for all 5 replies to come in. */
