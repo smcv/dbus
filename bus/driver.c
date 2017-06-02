@@ -1083,18 +1083,6 @@ bus_driver_handle_update_activation_environment (DBusConnection *connection,
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-#ifdef DBUS_UNIX
-    {
-      /* UpdateActivationEnvironment is basically a recipe for privilege
-       * escalation so let's be extra-careful: do not allow the sysadmin
-       * to shoot themselves in the foot.
-       */
-      if (!bus_driver_check_caller_is_privileged (connection, transaction,
-                                                  message, error))
-        return FALSE;
-    }
-#endif
-
   context = bus_connection_get_context (connection);
 
   if (bus_context_get_servicehelper (context) != NULL)
@@ -2195,10 +2183,6 @@ bus_driver_handle_become_monitor (DBusConnection *connection,
   if (!bus_apparmor_allows_eavesdropping (connection, bustype, error))
     goto out;
 
-  if (!bus_driver_check_caller_is_privileged (connection, transaction,
-                                              message, error))
-    goto out;
-
   if (!dbus_message_get_args (message, error,
         DBUS_TYPE_ARRAY, DBUS_TYPE_STRING, &match_rules, &n_match_rules,
         DBUS_TYPE_UINT32, &flags,
@@ -2377,6 +2361,11 @@ typedef enum
    * <https://bugs.freedesktop.org/show_bug.cgi?id=101256> */
   METHOD_FLAG_ANY_PATH = (1 << 0),
 
+  /* If set, callers must be privileged. On Unix, the uid of the connection
+   * must either be the uid of this process, or 0 (root). On Windows,
+   * the SID of the connection must be the SID of this process. */
+  METHOD_FLAG_PRIVILEGED = (1 << 1),
+
   METHOD_FLAG_NONE = 0
 } MethodFlags;
 
@@ -2429,7 +2418,7 @@ static const MessageHandler dbus_message_handlers[] = {
     DBUS_TYPE_ARRAY_AS_STRING DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_STRING_AS_STRING DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
     "",
     bus_driver_handle_update_activation_environment,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_PRIVILEGED },
   { "NameHasOwner",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_BOOLEAN_AS_STRING,
@@ -2525,7 +2514,7 @@ static const MessageHandler introspectable_message_handlers[] = {
 
 static const MessageHandler monitoring_message_handlers[] = {
   { "BecomeMonitor", "asu", "", bus_driver_handle_become_monitor,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_PRIVILEGED },
   { NULL, NULL, NULL, NULL }
 };
 
@@ -2918,6 +2907,14 @@ bus_driver_handle_message (DBusConnection *connection,
             continue;
 
           _dbus_verbose ("Found driver handler for %s\n", name);
+
+          if ((mh->flags & METHOD_FLAG_PRIVILEGED) &&
+              !bus_driver_check_caller_is_privileged (connection, transaction,
+                                                      message, error))
+            {
+              _DBUS_ASSERT_ERROR_IS_SET (error);
+              return FALSE;
+            }
 
           if (!(is_canonical_path || (mh->flags & METHOD_FLAG_ANY_PATH)))
             {
