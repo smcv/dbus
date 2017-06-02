@@ -6569,6 +6569,88 @@
         </para>
       </sect3>
 
+      <sect3 id="bus-messages-add-container-server">
+        <title><literal>org.freedesktop.DBus.Containers1.AddContainerServer</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            AddContainerServer (in STRING container_type,
+                                in STRING container_name,
+                                in DICT&lt;STRING,VARIANT&gt; metadata,
+                                in UNIX_FD listener,
+                                in DICT&lt;STRING,VARIANT&gt; named_arguments,
+                                out OBJECT_PATH container_instance)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Reversed domain name identifying a container manager or
+                    container technology, such as
+                    <literal>org.flatpak</literal> or
+                    <literal>io.snapcraft</literal>
+                  </entry>
+                </row>
+                <row>
+                  <entry>1</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Some unique identifier for an application or container,
+                    whose meaning is defined by the maintainers of the
+                    container type
+                  </entry>
+                </row>
+                <row>
+                  <entry>2</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
+                  <entry>
+                    Metadata describing the application or container, with the
+                    keys and values defined by the maintainers of the container
+                    type
+                  </entry>
+                </row>
+                <row>
+                  <entry>3</entry>
+                  <entry>UNIX_FD</entry>
+                  <entry>
+                    A listening socket for the message bus implementation to
+                    <literal>accept()</literal> connections. The caller is
+                    responsible for calling <literal>bind()</literal>
+                    and <literal>listen()</literal>.
+                  </entry>
+                </row>
+                <row>
+                  <entry>4</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
+                  <entry>
+                    Additional arguments that extend this method.
+                    The only named arguments that are allowed are the ones
+                    listed in the
+                    <literal>org.freedesktop.DBus.Containers1.SupportedArguments</literal>
+                    property. All other named arguments are an error.
+                  </entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          TODO
+       </para>
+      </sect3>
+
       <sect3 id="bus-messages-become-monitor">
         <title><literal>org.freedesktop.DBus.Monitoring.BecomeMonitor</literal></title>
         <para>
