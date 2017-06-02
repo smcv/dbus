@@ -118,6 +118,9 @@ test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 test_syslog_SOURCES = internals/syslog.c
 test_syslog_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
+test_variant_SOURCES = internals/variant.c
+test_variant_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
 manual_backtrace_SOURCES = manual-backtrace.c
 manual_backtrace_LDADD = $(top_builddir)/dbus/libdbus-1.la
 
@@ -173,6 +176,7 @@ installable_tests += \
 	test-syntax \
 	test-syslog \
 	test-uid-permissions \
+	test-variant \
 	$(NULL)
 
 if DBUS_UNIX

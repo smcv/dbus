@@ -5083,6 +5083,239 @@ dbus_message_get_allow_interactive_authorization (DBusMessage *message)
                                 DBUS_HEADER_FLAG_ALLOW_INTERACTIVE_AUTHORIZATION);
 }
 
+/**
+ * An opaque data structure containing the serialized form of any single
+ * D-Bus message item, whose signature is a single complete type.
+ *
+ * (Implementation detail: It's serialized as a single variant.)
+ */
+struct DBusVariant
+{
+  DBusString data;
+};
+
+/**
+ * Copy a single D-Bus message item from reader into a
+ * newly-allocated #DBusVariant.
+ *
+ * For example, if a message contains three string arguments, and reader points
+ * to the second string, the resulting DBusVariant will have signature
+ * #DBUS_TYPE_STRING_AS_STRING and contain only that second string.
+ *
+ * @param reader An iterator over message items, pointing to one item to copy
+ * @returns The variant, or #NULL if out of memory
+ */
+DBusVariant *
+_dbus_variant_read (DBusMessageIter *reader)
+{
+  DBusVariant *self = NULL;
+  /* Points to the single item we will read from the reader */
+  DBusMessageRealIter *real_reader = (DBusMessageRealIter *) reader;
+  /* The position in self at which we will write a single variant
+   * (it is position 0) */
+  DBusTypeWriter items_writer;
+  /* The position in self at which we will write a copy of reader
+   * (it is inside the variant) */
+  DBusTypeWriter variant_writer;
+  /* 'v' */
+  DBusString variant_signature;
+  /* Whatever is the signature of the item we will copy from the reader */
+  DBusString contained_signature;
+  /* TRUE if self->data needs to be freed */
+  dbus_bool_t data_inited = FALSE;
+  /* The type of the item we will read from the reader */
+  int type;
+  /* The string, start position within that string, and length of the signature
+   * of the single complete type of the item reader points to */
+  const DBusString *sig;
+  int start, len;
+
+  _dbus_assert (_dbus_message_iter_check (real_reader));
+  _dbus_assert (real_reader->iter_type == DBUS_MESSAGE_ITER_TYPE_READER);
+  _dbus_string_init_const (&variant_signature, DBUS_TYPE_VARIANT_AS_STRING);
+  type = dbus_message_iter_get_arg_type (reader);
+  _dbus_type_reader_get_signature (&real_reader->u.reader, &sig, &start, &len);
+
+  if (!_dbus_string_init (&contained_signature))
+    return NULL;
+
+  if (!_dbus_string_append_len (&contained_signature,
+                                _dbus_string_get_const_data (sig) + start,
+                                len))
+    goto oom;
+
+  self = dbus_new0 (DBusVariant, 1);
+
+  if (self == NULL)
+    goto oom;
+
+  if (!_dbus_string_init (&self->data))
+    goto oom;
+
+  data_inited = TRUE;
+
+  _dbus_type_writer_init_values_only (&items_writer, DBUS_COMPILER_BYTE_ORDER,
+                                      &variant_signature, 0, &self->data, 0);
+
+  if (!_dbus_type_writer_recurse (&items_writer, DBUS_TYPE_VARIANT,
+                                  &contained_signature, 0, &variant_writer))
+    goto oom;
+
+  if (dbus_type_is_basic (type))
+    {
+      DBusBasicValue value;
+
+      dbus_message_iter_get_basic (reader, &value);
+
+      if (!_dbus_type_writer_write_basic (&variant_writer, type, &value))
+        goto oom;
+    }
+  else if (type == DBUS_TYPE_ARRAY)
+    {
+      /* Points to each item in turn inside the array we are copying */
+      DBusMessageIter array_reader;
+      /* Same as array_reader */
+      DBusMessageRealIter *real_array_reader = (DBusMessageRealIter *) &array_reader;
+      /* The position inside the copied array at which we will write
+       * the copy of array_reader */
+      DBusTypeWriter array_writer;
+
+      dbus_message_iter_recurse (reader, &array_reader);
+
+      if (!_dbus_type_writer_recurse (&variant_writer, type,
+                                      &contained_signature, 1, &array_writer))
+        goto oom;
+
+      if (!_dbus_type_writer_write_reader (&array_writer,
+                                           &real_array_reader->u.reader))
+        goto oom;
+
+      if (!_dbus_type_writer_unrecurse (&variant_writer, &array_writer))
+        goto oom;
+    }
+  else if (type == DBUS_TYPE_DICT_ENTRY || type == DBUS_TYPE_VARIANT ||
+           type == DBUS_TYPE_STRUCT)
+    {
+      /* Points to each item in turn inside the container we are copying */
+      DBusMessageIter inner_reader;
+      /* Same as inner_reader */
+      DBusMessageRealIter *real_inner_reader = (DBusMessageRealIter *) &inner_reader;
+      /* The position inside the copied container at which we will write the
+       * copy of inner_reader */
+      DBusTypeWriter inner_writer;
+
+      dbus_message_iter_recurse (reader, &inner_reader);
+
+      if (!_dbus_type_writer_recurse (&variant_writer, type, NULL, 0,
+                                      &inner_writer))
+        goto oom;
+
+      if (!_dbus_type_writer_write_reader (&inner_writer,
+                                           &real_inner_reader->u.reader))
+        goto oom;
+
+      if (!_dbus_type_writer_unrecurse (&variant_writer, &inner_writer))
+        goto oom;
+    }
+
+  return self;
+
+oom:
+  if (self != NULL)
+    {
+      if (data_inited)
+        _dbus_string_free (&self->data);
+
+      dbus_free (self);
+    }
+
+  _dbus_string_free (&contained_signature);
+  return NULL;
+}
+
+/**
+ * Return the signature of the item stored in self. It is a single complete
+ * type.
+ *
+ * @param self the variant
+ */
+const char *
+_dbus_variant_get_signature (DBusVariant *self)
+{
+  unsigned char len;
+  const char *ret;
+
+  _dbus_assert (self != NULL);
+
+  /* Here we make use of the fact that the serialization of a variant starts
+   * with the 1-byte length, then that many bytes of signature, then \0. */
+  len = _dbus_string_get_byte (&self->data, 0);
+  ret = _dbus_string_get_const_data_len (&self->data, 1, len);
+  _dbus_assert (strlen (ret) == len);
+  return ret;
+}
+
+/**
+ * Copy the single D-Bus message item from self into writer.
+ *
+ * For example, if writer points into the body of an empty message and self has
+ * signature #DBUS_TYPE_STRING_AS_STRING, then the message will
+ * have signature #DBUS_TYPE_STRING_AS_STRING after this function returns
+ *
+ * @param self the variant
+ * @param writer the place to write the contents of the variant
+ * @returns #TRUE on success, #FALSE if out of memory
+ */
+dbus_bool_t
+_dbus_variant_write (DBusVariant *self,
+                     DBusMessageIter *writer)
+{
+  /* 'v' */
+  DBusString variant_signature;
+  /* Points to the single item in self */
+  DBusTypeReader variant_reader;
+  /* Points to the single item (of whatever type) inside the variant */
+  DBusTypeReader reader;
+  /* The position at which we will copy reader */
+  DBusMessageRealIter *real_writer = (DBusMessageRealIter *) writer;
+  dbus_bool_t ret;
+
+  _dbus_assert (self != NULL);
+  _dbus_assert (_dbus_message_iter_append_check (real_writer));
+  _dbus_assert (real_writer->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
+
+  _dbus_string_init_const (&variant_signature, DBUS_TYPE_VARIANT_AS_STRING);
+  _dbus_type_reader_init (&reader, DBUS_COMPILER_BYTE_ORDER,
+                          &variant_signature, 0, &self->data, 0);
+  _dbus_type_reader_recurse (&reader, &variant_reader);
+
+  if (!_dbus_message_iter_open_signature (real_writer))
+    return FALSE;
+
+  ret = _dbus_type_writer_write_reader (&real_writer->u.writer,
+                                        &variant_reader);
+
+  if (!_dbus_message_iter_close_signature (real_writer))
+    return FALSE;
+
+  return ret;
+}
+
+const DBusString *
+_dbus_variant_peek (DBusVariant *self)
+{
+  _dbus_assert (self != NULL);
+  return &self->data;
+}
+
+void
+_dbus_variant_free (DBusVariant *self)
+{
+  _dbus_assert (self != NULL);
+  _dbus_string_free (&self->data);
+  dbus_free (self);
+}
+
 /** @} */
 
 /* tests in dbus-message-util.c */

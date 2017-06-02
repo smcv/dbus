@@ -119,6 +119,19 @@ void               _dbus_message_loader_set_pending_fds_function (DBusMessageLoa
                                                                   void (* callback) (void *),
                                                                   void *data);
 
+typedef struct DBusVariant DBusVariant;
+DBUS_PRIVATE_EXPORT
+DBusVariant       *_dbus_variant_read                            (DBusMessageIter *reader);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t        _dbus_variant_write                           (DBusVariant *self,
+                                                                  DBusMessageIter *writer);
+DBUS_PRIVATE_EXPORT
+void               _dbus_variant_free                            (DBusVariant *self);
+DBUS_PRIVATE_EXPORT
+const DBusString  *_dbus_variant_peek                            (DBusVariant *self);
+DBUS_PRIVATE_EXPORT
+const char        *_dbus_variant_get_signature                   (DBusVariant *self);
+
 typedef struct DBusInitialFDs DBusInitialFDs;
 DBusInitialFDs *_dbus_check_fdleaks_enter (void);
 void            _dbus_check_fdleaks_leave (DBusInitialFDs *fds);
