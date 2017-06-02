@@ -1762,6 +1762,16 @@ AC_ARG_ENABLE([user-session],
 AM_CONDITIONAL([DBUS_ENABLE_USER_SESSION],
   [test "x$enable_user_session" = xyes])
 
+AC_ARG_ENABLE([containers],
+  [AS_HELP_STRING([--enable-containers],
+    [enable restricted servers for app containers])],
+  [], [enable_containers=no])
+AS_IF([test "x$enable_containers" = xyes && test "x$dbus_unix" != xyes],
+  [AC_MSG_ERROR([Restricted servers for app containers require Unix])])
+AS_IF([test "x$enable_containers" = xyes],
+  [AC_DEFINE([DBUS_ENABLE_CONTAINERS], [1],
+    [Define to enable restricted servers for app containers])])
+
 AC_CONFIG_FILES([
 Doxyfile
 dbus/Version
@@ -1842,6 +1852,7 @@ echo "
         Building assertions:      ${enable_asserts}
         Building checks:          ${enable_checks}
         Building bus stats API:   ${enable_stats}
+        Building container API:   ${enable_containers}
         Building SELinux support: ${have_selinux}
         Building AppArmor support: ${have_apparmor}
         Building inotify support: ${have_inotify}

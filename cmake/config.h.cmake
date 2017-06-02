@@ -28,6 +28,7 @@
 #cmakedefine DBUS_RUNSTATEDIR "@DBUS_RUNSTATEDIR@"
 
 #cmakedefine DBUS_ENABLE_STATS
+#cmakedefine DBUS_ENABLE_CONTAINERS
 
 #define TEST_LISTEN       "@TEST_LISTEN@"
 

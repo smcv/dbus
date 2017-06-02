@@ -128,6 +128,7 @@ endif(NOT WIN32)
 option (DBUS_DISABLE_ASSERT "Disable assertion checking" OFF)
 
 option (DBUS_ENABLE_STATS "enable bus daemon usage statistics" OFF)
+option (DBUS_ENABLE_CONTAINERS "enable restricted servers for app-containers" OFF)
 
 if(WIN32)
     set(FD_SETSIZE "8192" CACHE STRING "The maximum number of connections that can be handled at once")

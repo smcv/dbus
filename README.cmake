@@ -117,6 +117,9 @@ DBUS_ENABLE_DOXYGEN_DOCS:BOOL=OFF
 // enable bus daemon usage statistics
 DBUS_ENABLE_STATS:BOOL=OFF
 
+// enable restricted servers for app containers
+DBUS_ENABLE_CONTAINERS:BOOL=OFF
+
 // support verbose debug mode
 DBUS_ENABLE_VERBOSE_MODE:BOOL=ON
 
