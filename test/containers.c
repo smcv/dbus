@@ -193,6 +193,133 @@ test_basic (Fixture *f,
 }
 
 static void
+test_wrong_handle (Fixture *f,
+                   gconstpointer context)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  GVariant *tuple;
+  GVariant *parameters;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ssa{sv}ha{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              5, /* This cannot work, there are not 6 fds */
+                              NULL); /* no named parameters */
+
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddContainerServer", parameters,
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+#else /* !HAVE_UNIX_FD_PASSING */
+  g_test_skip ("fd-passing not supported");
+#endif /* !HAVE_UNIX_FD_PASSING */
+}
+
+static void
+test_unsupported_parameter (Fixture *f,
+                            gconstpointer context)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  GVariant *tuple;
+  GVariant *parameters;
+  GVariantDict named_argument_builder;
+
+  if (f->skip)
+    return;
+
+  fixture_listen (f);
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_variant_dict_init (&named_argument_builder, NULL);
+  g_variant_dict_insert (&named_argument_builder,
+                         "ThisArgumentIsntImplemented",
+                         "b", FALSE);
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ssa{sv}h@a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              f->handle,
+                              g_variant_dict_end (&named_argument_builder));
+
+  tuple = g_dbus_proxy_call_with_unix_fd_list_sync (f->proxy,
+                                                    "AddContainerServer",
+                                                    parameters,
+                                                    G_DBUS_CALL_FLAGS_NONE,
+                                                    -1, f->fds, NULL, NULL,
+                                                    &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+#else /* !HAVE_UNIX_FD_PASSING */
+  g_test_skip ("fd-passing not supported");
+#endif /* !HAVE_UNIX_FD_PASSING */
+}
+
+static void
+test_invalid_type_name (Fixture *f,
+                        gconstpointer context)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  GVariant *tuple;
+  GVariant *parameters;
+
+  if (f->skip)
+    return;
+
+  fixture_listen (f);
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ssa{sv}ha{sv})",
+                              "this is not a valid container type name",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              f->handle,
+                              NULL); /* no named arguments */
+
+  tuple = g_dbus_proxy_call_with_unix_fd_list_sync (f->proxy,
+                                                    "AddContainerServer",
+                                                    parameters,
+                                                    G_DBUS_CALL_FLAGS_NONE,
+                                                    -1, f->fds, NULL, NULL,
+                                                    &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+#else /* !HAVE_UNIX_FD_PASSING */
+  g_test_skip ("fd-passing not supported");
+#endif /* !HAVE_UNIX_FD_PASSING */
+}
+
+static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
@@ -244,6 +371,12 @@ main (int argc,
               setup, test_get_supported_arguments, teardown);
   g_test_add ("/containers/basic", Fixture, NULL,
               setup, test_basic, teardown);
+  g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
+              setup, test_unsupported_parameter, teardown);
+  g_test_add ("/containers/invalid-type-name", Fixture, NULL,
+              setup, test_invalid_type_name, teardown);
+  g_test_add ("/containers/wrong-handle", Fixture, NULL,
+              setup, test_wrong_handle, teardown);
 
   return g_test_run ();
 }
