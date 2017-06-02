@@ -52,6 +52,8 @@ set (BUS_SOURCES
 #    ${BUS_DIR}/config-parser-trivial.c
 	${BUS_DIR}/connection.c
 	${BUS_DIR}/connection.h				
+	${BUS_DIR}/containers.c
+	${BUS_DIR}/containers.h
 	${BUS_DIR}/desktop-file.c				
 	${BUS_DIR}/desktop-file.h				
 	${BUS_DIR}/dir-watch.h				

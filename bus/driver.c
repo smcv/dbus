@@ -26,6 +26,7 @@
 #include "activation.h"
 #include "apparmor.h"
 #include "connection.h"
+#include "containers.h"
 #include "driver.h"
 #include "dispatch.h"
 #include "services.h"
@@ -2512,6 +2513,19 @@ static const MessageHandler introspectable_message_handlers[] = {
   { NULL, NULL, NULL, NULL }
 };
 
+#ifdef HAVE_UNIX_FD_PASSING
+static const MessageHandler containers_message_handlers[] = {
+  { "AddContainerServer", "ssa{sv}ha{sv}", "",
+    bus_containers_handle_add_container_server,
+    METHOD_FLAG_PRIVILEGED },
+  { NULL, NULL, NULL, NULL }
+};
+static const PropertyHandler containers_property_handlers[] = {
+  { "SupportedArguments", "as", bus_containers_supported_arguments_getter },
+  { NULL, NULL, NULL }
+};
+#endif
+
 static const MessageHandler monitoring_message_handlers[] = {
   { "BecomeMonitor", "asu", "", bus_driver_handle_become_monitor,
     METHOD_FLAG_PRIVILEGED },
@@ -2615,6 +2629,10 @@ static InterfaceHandler interface_handlers[] = {
 #ifdef DBUS_ENABLE_STATS
   { BUS_INTERFACE_STATS, stats_message_handlers, NULL,
     INTERFACE_FLAG_NONE },
+#endif
+#ifdef HAVE_UNIX_FD_PASSING
+  { DBUS_INTERFACE_CONTAINERS1, containers_message_handlers, NULL,
+    INTERFACE_FLAG_NONE, containers_property_handlers },
 #endif
   { DBUS_INTERFACE_PEER, peer_message_handlers, NULL,
     /* Not in the Interfaces property because it's a pseudo-interface
