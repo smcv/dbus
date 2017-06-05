@@ -45,6 +45,7 @@ typedef struct BusTransaction   BusTransaction;
 typedef struct BusMatchmaker    BusMatchmaker;
 typedef struct BusMatchRule     BusMatchRule;
 typedef struct BusActivationEntry BusActivationEntry;
+typedef struct BusContainers    BusContainers;
 
 typedef struct
 {
@@ -106,6 +107,7 @@ dbus_bool_t       bus_context_allow_unix_user                    (BusContext    
 dbus_bool_t       bus_context_allow_windows_user                 (BusContext       *context,
                                                                   const char       *windows_sid);
 BusPolicy*        bus_context_get_policy                         (BusContext       *context);
+BusContainers    *bus_context_get_containers                     (BusContext       *context);
 
 BusClientPolicy*  bus_context_create_client_policy               (BusContext       *context,
                                                                   DBusConnection   *connection,

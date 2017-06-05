@@ -25,6 +25,9 @@
 
 #include "bus.h"
 
+BusContainers        *bus_containers_new           (void);
+void                  bus_containers_unref         (BusContainers *self);
+
 dbus_bool_t bus_containers_handle_add_container_server (DBusConnection *connection,
                                                         BusTransaction *transaction,
                                                         DBusMessage    *message,

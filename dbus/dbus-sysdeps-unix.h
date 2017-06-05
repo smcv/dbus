@@ -147,6 +147,7 @@ dbus_bool_t _dbus_parse_uid (const DBusString  *uid_str,
 DBUS_PRIVATE_EXPORT
 void _dbus_close_all (void);
 
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_append_address_from_socket (DBusSocket  fd,
                                               DBusString *address,
                                               DBusError  *error);
