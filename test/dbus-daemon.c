@@ -375,6 +375,170 @@ test_no_reply (Fixture *f,
 }
 
 static void
+test_own_creds (Fixture *f,
+                gconstpointer context)
+{
+  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials");
+  const char *bus_itself = DBUS_SERVICE_DBUS;
+  DBusPendingCall *pc;
+  DBusMessageIter args_iter;
+  DBusMessageIter arr_iter;
+  DBusMessageIter pair_iter;
+  DBusMessageIter var_iter;
+  enum {
+      SEEN_UNIX_USER = 1,
+      SEEN_PID = 2,
+      SEEN_WINDOWS_SID = 4,
+      SEEN_LINUX_SECURITY_LABEL = 8
+  } seen = 0;
+
+  if (m == NULL)
+    g_error ("OOM");
+
+  if (!dbus_message_append_args (m,
+        DBUS_TYPE_STRING, &bus_itself,
+        DBUS_TYPE_INVALID))
+    g_error ("OOM");
+
+  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
+                                        DBUS_TIMEOUT_USE_DEFAULT) ||
+      pc == NULL)
+    g_error ("OOM");
+
+  dbus_message_unref (m);
+  m = NULL;
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &m);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+                                          &m, NULL))
+    g_error ("OOM");
+
+  while (m == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  g_assert_cmpstr (dbus_message_get_signature (m), ==, "a{sv}");
+
+  dbus_message_iter_init (m, &args_iter);
+  g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
+      DBUS_TYPE_ARRAY);
+  g_assert_cmpuint (dbus_message_iter_get_element_type (&args_iter), ==,
+      DBUS_TYPE_DICT_ENTRY);
+  dbus_message_iter_recurse (&args_iter, &arr_iter);
+
+  while (dbus_message_iter_get_arg_type (&arr_iter) != DBUS_TYPE_INVALID)
+    {
+      const char *name;
+
+      dbus_message_iter_recurse (&arr_iter, &pair_iter);
+      g_assert_cmpuint (dbus_message_iter_get_arg_type (&pair_iter), ==,
+          DBUS_TYPE_STRING);
+      dbus_message_iter_get_basic (&pair_iter, &name);
+      dbus_message_iter_next (&pair_iter);
+      g_assert_cmpuint (dbus_message_iter_get_arg_type (&pair_iter), ==,
+          DBUS_TYPE_VARIANT);
+      dbus_message_iter_recurse (&pair_iter, &var_iter);
+
+      if (g_strcmp0 (name, "UnixUserID") == 0)
+        {
+#ifdef G_OS_UNIX
+          guint32 u32;
+
+          g_assert (!(seen & SEEN_UNIX_USER));
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&var_iter), ==,
+              DBUS_TYPE_UINT32);
+          dbus_message_iter_get_basic (&var_iter, &u32);
+          g_test_message ("%s of message bus is %u", name, u32);
+          g_assert_cmpuint (u32, ==, geteuid ());
+          seen |= SEEN_UNIX_USER;
+#else
+          g_assert_not_reached ();
+#endif
+        }
+      else if (g_strcmp0 (name, "WindowsSID") == 0)
+        {
+#ifdef G_OS_WIN32
+          gchar *sid;
+          char *self_sid;
+
+          g_assert (!(seen & SEEN_WINDOWS_SID));
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&var_iter), ==,
+              DBUS_TYPE_STRING);
+          dbus_message_iter_get_basic (&var_iter, &sid);
+          g_test_message ("%s of message bus is %s", name, sid);
+          if (_dbus_getsid (&self_sid, 0))
+            {
+              g_assert_cmpstr (self_sid, ==, sid);
+              LocalFree(self_sid);
+            }
+          seen |= SEEN_WINDOWS_SID;
+#else
+          g_assert_not_reached ();
+#endif
+        }
+      else if (g_strcmp0 (name, "ProcessID") == 0)
+        {
+          guint32 u32;
+
+          g_assert (!(seen & SEEN_PID));
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&var_iter), ==,
+              DBUS_TYPE_UINT32);
+          dbus_message_iter_get_basic (&var_iter, &u32);
+          g_test_message ("%s of message bus is %u", name, u32);
+#ifdef G_OS_UNIX
+          g_assert_cmpuint (u32, ==, f->daemon_pid);
+#elif defined(G_OS_WIN32)
+          /* GPid is actually a HANDLE, not the Win32 process ID that is
+           * returned by GetConnectionCredentials */
+          g_assert_cmpuint (u32, ==, GetProcessId (f->daemon_pid));
+#else
+          g_assert_not_reached ();
+#endif
+          seen |= SEEN_PID;
+        }
+      else if (g_strcmp0 (name, "LinuxSecurityLabel") == 0)
+        {
+#ifdef __linux__
+          gchar *label;
+          int len;
+          DBusMessageIter ay_iter;
+
+          g_assert (!(seen & SEEN_LINUX_SECURITY_LABEL));
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&var_iter), ==,
+              DBUS_TYPE_ARRAY);
+          dbus_message_iter_recurse (&var_iter, &ay_iter);
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&ay_iter), ==,
+              DBUS_TYPE_BYTE);
+          dbus_message_iter_get_fixed_array (&ay_iter, &label, &len);
+          g_test_message ("%s of message bus is %s", name, label);
+          g_assert_cmpuint (strlen (label) + 1, ==, len);
+          seen |= SEEN_LINUX_SECURITY_LABEL;
+#else
+          g_assert_not_reached ();
+#endif
+        }
+
+      dbus_message_iter_next (&arr_iter);
+    }
+
+#ifdef UNIX_USER_SHOULD_WORK
+  g_assert (seen & SEEN_UNIX_USER);
+#endif
+
+#ifdef PID_SHOULD_WORK
+  g_assert (seen & SEEN_PID);
+#endif
+
+#ifdef G_OS_WIN32
+  g_assert (seen & SEEN_WINDOWS_SID);
+#endif
+
+  dbus_message_unref (m);
+  dbus_pending_call_unref (pc);
+}
+
+static void
 test_creds (Fixture *f,
     gconstpointer context)
 {
@@ -1179,6 +1343,7 @@ main (int argc,
   g_test_add ("/no-reply/timeout", Fixture, &finite_timeout_config,
       setup, test_no_reply, teardown);
   g_test_add ("/creds", Fixture, NULL, setup, test_creds, teardown);
+  g_test_add ("/own-creds", Fixture, NULL, setup, test_own_creds, teardown);
   g_test_add ("/processid", Fixture, NULL, setup, test_processid, teardown);
   g_test_add ("/canonical-path/uae", Fixture, NULL,
       setup, test_canonical_path_uae, teardown);
