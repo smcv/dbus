@@ -1746,9 +1746,9 @@ write_credentials_byte (int             server_fd,
 }
 
 /* return FALSE on OOM, TRUE otherwise, even if no credentials were found */
-static dbus_bool_t
-add_linux_security_label_to_credentials (int              client_fd,
-                                         DBusCredentials *credentials)
+dbus_bool_t
+_dbus_add_linux_security_label_to_credentials (int              client_fd,
+                                               DBusCredentials *credentials)
 {
 #if defined(__linux__) && defined(SO_PEERSEC)
   DBusString buf;
@@ -2171,7 +2171,8 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
         }
     }
 
-  if (!add_linux_security_label_to_credentials (client_fd.fd, credentials))
+  if (!_dbus_add_linux_security_label_to_credentials (client_fd.fd,
+                                                      credentials))
     {
       _DBUS_SET_OOM (error);
       return FALSE;

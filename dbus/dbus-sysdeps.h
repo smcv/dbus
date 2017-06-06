@@ -683,6 +683,8 @@ dbus_bool_t     _dbus_rlimit_restore_fd_limit              (DBusRLimit   *saved,
                                                             DBusError    *error);
 void            _dbus_rlimit_free                          (DBusRLimit   *lim);
 
+dbus_bool_t     _dbus_get_self_linux_security_label        (const char  **label);
+
 /** @} */
 
 DBUS_END_DECLS

@@ -25,6 +25,8 @@
 #include <config.h>
 #include "dbus-sysdeps.h"
 #include "dbus-sysdeps-unix.h"
+
+#include "dbus-credentials.h"
 #include "dbus-internals.h"
 #include "dbus-list.h"
 #include "dbus-pipe.h"
@@ -1508,4 +1510,71 @@ _dbus_get_session_config_file (DBusString *str)
   _dbus_assert (_dbus_string_get_length (str) == 0);
 
   return _dbus_string_append (str, DBUS_SESSION_CONFIG_FILE);
+}
+
+/**
+ * Copy the Linux security label of this process. This is NULL on all
+ * non-Linux platforms, and on Linux if no LSM is in use.
+ *
+ * @returns #FALSE if no memory
+ */
+dbus_bool_t
+_dbus_get_self_linux_security_label (const char **label_p)
+{
+#ifdef __linux__
+  static DBusCredentials *credentials;
+#endif
+
+  _dbus_assert (label_p != NULL);
+  *label_p = NULL;
+
+#ifdef __linux__
+  if (credentials == NULL)
+    {
+      int socks[2];
+
+      credentials = _dbus_credentials_new ();
+
+      if (credentials == NULL)
+        return FALSE;
+
+      /*
+       * Reading from /proc/self/attr/current seems appealing, but it has
+       * some problems:
+       *
+       * - Under AppArmor, it has a trailing newline, which is not consistent
+       *   with the result of getsockopt(., SOL_SOCKET, SO_PEERSEC, ...);
+       *   and in general we want to guarantee that we return exactly the
+       *   same thing as that getsockopt
+       * - Pseudo-files in /proc have size 0 according to stat, with which
+       *   _dbus_file_get_contents() is not compatible
+       *
+       * But we already know how to get this information from a socket
+       * with getsockopt(), so cheat and do it that way...
+       */
+
+      /* If we can't make a socket to ourselves, assume we have no special
+       * credentials */
+      if (socketpair (AF_UNIX, SOCK_STREAM, 0, socks) != 0)
+        return TRUE;
+
+      _dbus_fd_set_close_on_exec (socks[0]);
+      _dbus_fd_set_close_on_exec (socks[1]);
+
+      if (!_dbus_add_linux_security_label_to_credentials (socks[0],
+                                                          credentials))
+        {
+          close (socks[0]);
+          close (socks[1]);
+          return FALSE;
+        }
+
+      close (socks[0]);
+      close (socks[1]);
+    }
+
+  *label_p = _dbus_credentials_get_linux_security_label (credentials);
+#endif
+
+  return TRUE;
 }

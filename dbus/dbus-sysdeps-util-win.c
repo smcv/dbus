@@ -1666,3 +1666,17 @@ _dbus_get_session_config_file (DBusString *str)
 
   return _dbus_get_config_file_name(str, "session.conf");
 }
+
+/**
+ * Get the Linux security label of this process. This is NULL on all
+ * non-Linux platforms, and on Linux if no LSM is in use.
+ *
+ * @returns #FALSE if no memory
+ */
+dbus_bool_t
+_dbus_get_self_linux_security_label (const char **label_p)
+{
+  _dbus_assert (label_p != NULL);
+  *label_p = NULL;
+  return TRUE;
+}

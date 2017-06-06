@@ -165,6 +165,10 @@ DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_ensure_standard_fds (DBusEnsureStandardFdsFlags   flags,
                                        const char                 **error_str_p);
 
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_add_linux_security_label_to_credentials (int              client_fd,
+                                                           DBusCredentials *credentials);
+
 /** @} */
 
 DBUS_END_DECLS

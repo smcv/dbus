@@ -69,6 +69,7 @@ DBUS_PRIVATE_EXPORT
 dbus_uid_t       _dbus_credentials_get_unix_uid             (DBusCredentials    *credentials);
 DBUS_PRIVATE_EXPORT
 const char*      _dbus_credentials_get_windows_sid          (DBusCredentials    *credentials);
+DBUS_PRIVATE_EXPORT
 const char *     _dbus_credentials_get_linux_security_label (DBusCredentials    *credentials);
 void *           _dbus_credentials_get_adt_audit_data       (DBusCredentials    *credentials);
 dbus_int32_t     _dbus_credentials_get_adt_audit_data_size  (DBusCredentials    *credentials);
