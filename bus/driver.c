@@ -1899,13 +1899,18 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
   DBusMessageIter reply_iter;
   DBusMessageIter array_iter;
   unsigned long ulong_uid, ulong_pid;
-  char *s;
+  const char *linux_security_label;
+  char *copied_linux_security_label;
   const char *service;
+  char *windows_sid;
   BusDriverFound found;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
   reply = NULL;
+  linux_security_label = NULL;
+  copied_linux_security_label = NULL;
+  windows_sid = NULL;
 
   found = bus_driver_get_conn_helper (connection, message, "credentials",
                                       &service, &conn, error);
@@ -1915,14 +1920,30 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
       case BUS_DRIVER_FOUND_SELF:
         ulong_pid = _dbus_getpid ();
         ulong_uid = _dbus_getuid ();
+
+        /* possibly NULL even after TRUE is returned */
+        if (!_dbus_get_self_linux_security_label (&linux_security_label))
+          goto oom;
+
         break;
 
       case BUS_DRIVER_FOUND_PEER:
         if (!dbus_connection_get_unix_process_id (conn, &ulong_pid))
           ulong_pid = DBUS_PID_UNSET;
+
         if (!dbus_connection_get_unix_user (conn, &ulong_uid))
           ulong_uid = DBUS_UID_UNSET;
+
+        if (!_dbus_connection_get_linux_security_label (conn,
+                                                        &copied_linux_security_label))
+          linux_security_label = NULL;
+        else if (copied_linux_security_label == NULL)
+          goto oom;
+        else
+          linux_security_label = copied_linux_security_label;
+
         break;
+
       case BUS_DRIVER_FOUND_ERROR:
         /* fall through */
       default:
@@ -1947,45 +1968,32 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
 
   /* FIXME: Obtain the Windows user of the bus daemon itself */
   if (found == BUS_DRIVER_FOUND_PEER &&
-      dbus_connection_get_windows_user (conn, &s))
+      dbus_connection_get_windows_user (conn, &windows_sid))
     {
       DBusString str;
       dbus_bool_t result;
 
-      if (s == NULL)
+      if (windows_sid == NULL)
         goto oom;
 
-      _dbus_string_init_const (&str, s);
+      _dbus_string_init_const (&str, windows_sid);
       result = _dbus_validate_utf8 (&str, 0, _dbus_string_get_length (&str));
       _dbus_string_free (&str);
       if (result)
         {
-          if (!_dbus_asv_add_string (&array_iter, "WindowsSID", s))
-            {
-              dbus_free (s);
-              goto oom;
-            }
+          if (!_dbus_asv_add_string (&array_iter, "WindowsSID", windows_sid))
+            goto oom;
         }
-      dbus_free (s);
     }
 
-  /* FIXME: Obtain the security label for the bus daemon itself */
-  if (found == BUS_DRIVER_FOUND_PEER &&
-      _dbus_connection_get_linux_security_label (conn, &s))
+  if (linux_security_label != NULL)
     {
-      if (s == NULL)
-        goto oom;
-
       /* use the GVariant bytestring convention for strings of unknown
        * encoding: include the \0 in the payload, for zero-copy reading */
       if (!_dbus_asv_add_byte_array (&array_iter, "LinuxSecurityLabel",
-                                     s, strlen (s) + 1))
-        {
-          dbus_free (s);
-          goto oom;
-        }
-
-      dbus_free (s);
+                                     linux_security_label,
+                                     strlen (linux_security_label) + 1))
+        goto oom;
     }
 
   if (!_dbus_asv_close (&reply_iter, &array_iter))
@@ -2009,6 +2017,9 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
 
  failed:
   _DBUS_ASSERT_ERROR_IS_SET (error);
+
+  dbus_free (copied_linux_security_label);
+  dbus_free (windows_sid);
 
   if (reply)
     {
