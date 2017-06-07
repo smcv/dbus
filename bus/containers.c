@@ -34,6 +34,16 @@
 #include "connection.h"
 #include "utils.h"
 
+/* Data attached to a DBusConnection that has created container instances. */
+typedef struct
+{
+  /* List of instances created by this container manager */
+  DBusList *instances;
+} BusContainerManagerData;
+
+/* Data slot on DBusConnection, holding BusContainerManagerData */
+static dbus_int32_t container_manager_data_slot = -1;
+
 struct BusContainers
 {
   int refcount;
@@ -46,7 +56,12 @@ bus_containers_new (void)
 {
   /* We allocate the hash table lazily, expecting that the common case will
    * be a connection where this feature is never used */
-  BusContainers *self = dbus_new0 (BusContainers, 1);
+  BusContainers *self;
+
+  if (!dbus_connection_allocate_data_slot (&container_manager_data_slot))
+    return NULL;
+
+  self = dbus_new0 (BusContainers, 1);
 
   if (self == NULL)
     return NULL;
@@ -188,6 +203,17 @@ bus_container_instance_unref0 (void *p)
     bus_container_instance_unref (p);
 }
 
+static void
+bus_container_manager_data_free (BusContainerManagerData *self)
+{
+  BusContainerInstance *instance;
+
+  while ((instance = _dbus_list_pop_first (&self->instances)) != NULL)
+    bus_container_instance_unref (instance);
+
+  dbus_free (self);
+}
+
 /* We only accept the best available auth mechanism */
 static const char * const auth_mechanisms[] =
 {
@@ -214,6 +240,7 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
                                             DBusMessage    *message,
                                             DBusError      *error)
 {
+  BusContainerManagerData *d;
   DBusMessageIter iter;
   DBusMessageIter dict_iter;
   const char *type;
@@ -224,6 +251,7 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
   DBusSocket sock = DBUS_SOCKET_INIT;
   BusContext *context;
   BusContainers *containers;
+  DBusList *link_for_instances = NULL;
   DBusMessage *reply = NULL;
 
   context = bus_transaction_get_context (transaction);
@@ -234,10 +262,28 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
 
   address_inited = TRUE;
 
+  d = dbus_connection_get_data (connection, container_manager_data_slot);
+
+  if (d == NULL)
+    {
+      d = dbus_new0 (BusContainerManagerData, 1);
+      d->instances = NULL;
+
+      if (!dbus_connection_set_data (connection, container_manager_data_slot,
+                                     d,
+                                     (DBusFreeFunction) bus_container_manager_data_free))
+        goto oom;
+    }
+
   instance = bus_container_instance_new (context, error);
 
   if (instance == NULL)
     goto fail;
+
+  link_for_instances = _dbus_list_alloc_link (instance);
+
+  if (link_for_instances == NULL)
+    goto oom;
 
   /* We already checked this in bus_driver_handle_message() */
   _dbus_assert (dbus_message_has_signature (message, "ssa{sv}ha{sv}"));
@@ -356,6 +402,11 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
   else
     goto oom;
 
+  _dbus_list_append_link (&d->instances, link_for_instances);
+  /* transfer ownership */
+  bus_container_instance_ref (instance);
+  link_for_instances = NULL;
+
   reply = dbus_message_new_method_return (message);
 
   if (!dbus_message_append_args (reply,
@@ -397,6 +448,9 @@ fail:
   if (_dbus_socket_is_valid (sock))
     _dbus_close_socket (sock, NULL);
 
+  if (link_for_instances != NULL)
+    _dbus_list_free_link (link_for_instances);
+
   return FALSE;
 }
 
@@ -431,3 +485,32 @@ bus_containers_unref (BusContainers *self)
 }
 
 #endif /* HAVE_UNIX_FD_PASSING */
+
+void
+bus_containers_remove_connection (BusContainers *self,
+                                  DBusConnection *connection)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  BusContainerManagerData *d;
+  BusContainerInstance *instance;
+
+  d = dbus_connection_get_data (connection, container_manager_data_slot);
+
+  if (d == NULL)
+    return;
+
+  while ((instance = _dbus_list_pop_first (&d->instances)) != NULL)
+    {
+      bus_container_instance_stop_listening (instance);
+      bus_container_instance_unref (instance);
+    }
+#endif
+}
+
+void
+bus_containers_shutdown (void)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  dbus_connection_free_data_slot (&container_manager_data_slot);
+#endif
+}

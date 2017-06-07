@@ -1225,6 +1225,7 @@ bus_context_unref (BusContext *context)
       dbus_free (context);
 
       dbus_server_free_data_slot (&server_data_slot);
+      bus_containers_shutdown ();
     }
 }
 

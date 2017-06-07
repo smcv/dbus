@@ -36,4 +36,9 @@ dbus_bool_t bus_containers_handle_add_container_server (DBusConnection *connecti
 dbus_bool_t bus_containers_supported_arguments_getter (BusContext *context,
                                                        DBusMessageIter *var_iter);
 
+void        bus_containers_remove_connection          (BusContainers *self,
+                                                       DBusConnection *connection);
+
+void bus_containers_shutdown (void);
+
 #endif /* multiple-inclusion guard */
