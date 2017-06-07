@@ -147,5 +147,10 @@ dbus_bool_t       bus_context_check_security_policy              (BusContext    
                                                                   BusActivationEntry *activation_entry,
                                                                   DBusError        *error);
 void              bus_context_check_all_watches                  (BusContext       *context);
+dbus_bool_t       bus_context_setup_server                       (BusContext       *context,
+                                                                  DBusServer       *server,
+                                                                  DBusError        *error);
+dbus_bool_t       bus_context_add_incoming_connection            (BusContext       *context,
+                                                                  DBusConnection   *new_connection);
 
 #endif /* BUS_BUS_H */

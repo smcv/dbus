@@ -77,12 +77,14 @@ typedef struct
   char *name;
   DBusVariant *metadata;
   DBusServer *server;
+  BusContext *context;
 } BusContainerInstance;
 
 static dbus_uint64_t next_container_id = 0;
 
 static BusContainerInstance *
-bus_container_instance_new (DBusError *error)
+bus_container_instance_new (BusContext *context,
+                            DBusError *error)
 {
   BusContainerInstance *self = NULL;
   DBusString path;
@@ -126,6 +128,7 @@ bus_container_instance_new (DBusError *error)
   self->name = NULL;
   self->metadata = NULL;
   self->server = NULL;
+  self->context = bus_context_ref (context);
   return self;
 
 fail:
@@ -144,6 +147,18 @@ bus_container_instance_ref (BusContainerInstance *self)
 }
 
 static void
+bus_container_instance_stop_listening (BusContainerInstance *self)
+{
+  if (self->server != NULL)
+    {
+      dbus_server_set_new_connection_function (self->server, NULL, NULL, NULL);
+      dbus_server_disconnect (self->server);
+      dbus_server_unref (self->server);
+      self->server = NULL;
+    }
+}
+
+static void
 bus_container_instance_unref (BusContainerInstance *self)
 {
   _dbus_assert (self->refcount > 0);
@@ -157,11 +172,10 @@ bus_container_instance_unref (BusContainerInstance *self)
       if (self->metadata != NULL)
         _dbus_variant_free (self->metadata);
 
-      if (self->server != NULL)
-        {
-          dbus_server_disconnect (self->server);
-          dbus_server_unref (self->server);
-        }
+      bus_container_instance_stop_listening (self);
+
+      if (self->context != NULL)
+        bus_context_unref (self->context);
     }
 }
 
@@ -172,6 +186,26 @@ bus_container_instance_unref0 (void *p)
 {
   if (p != NULL)
     bus_container_instance_unref (p);
+}
+
+/* We only accept the best available auth mechanism */
+static const char * const auth_mechanisms[] =
+{
+  "EXTERNAL",
+  NULL
+};
+
+static void
+new_connection_cb (DBusServer     *server,
+                   DBusConnection *new_connection,
+                   void           *data)
+{
+  BusContainerInstance *instance = data;
+
+  if (!bus_context_add_incoming_connection (instance->context, new_connection))
+    return;
+
+  dbus_connection_set_allow_anonymous (new_connection, FALSE);
 }
 
 dbus_bool_t
@@ -190,6 +224,7 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
   DBusSocket sock = DBUS_SOCKET_INIT;
   BusContext *context;
   BusContainers *containers;
+  DBusMessage *reply = NULL;
 
   context = bus_transaction_get_context (transaction);
   containers = bus_context_get_containers (context);
@@ -199,7 +234,7 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
 
   address_inited = TRUE;
 
-  instance = bus_container_instance_new (error);
+  instance = bus_container_instance_new (context, error);
 
   if (instance == NULL)
     goto fail;
@@ -295,6 +330,16 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
 
   _dbus_socket_invalidate (&sock); /* transfer ownership if we succeeded */
 
+  if (!bus_context_setup_server (context, instance->server, error))
+    goto fail;
+
+  if (!dbus_server_set_auth_mechanisms (instance->server,
+                                        (const char **) auth_mechanisms))
+    goto oom;
+
+  dbus_server_set_new_connection_function (instance->server, new_connection_cb,
+                                           instance, NULL);
+
   if (containers->instances_by_path == NULL)
     {
       containers->instances_by_path = _dbus_hash_table_new (DBUS_HASH_STRING,
@@ -311,14 +356,30 @@ bus_containers_handle_add_container_server (DBusConnection *connection,
   else
     goto oom;
 
-  /* TODO: Actually implement the method */
-  dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED, "Not yet implemented");
-  goto fail;
+  reply = dbus_message_new_method_return (message);
+
+  if (!dbus_message_append_args (reply,
+                                 DBUS_TYPE_OBJECT_PATH, &instance->path,
+                                 DBUS_TYPE_INVALID))
+    goto oom;
+
+  _dbus_assert (dbus_message_has_signature (reply, "o"));
+
+  if (! bus_transaction_send_from_driver (transaction, connection, reply))
+    goto oom;
+
+  dbus_message_unref (reply);
+  bus_container_instance_unref (instance);
+  _dbus_string_free (&address);
+  return TRUE;
 
 oom:
   BUS_SET_OOM (error);
   /* fall through */
 fail:
+  if (reply != NULL)
+    dbus_message_unref (reply);
+
   /* It's OK to try to remove the instance from the hash table even if we
    * got an error before we added it, because they all have unique object
    * paths anyway. */

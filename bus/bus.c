@@ -98,7 +98,8 @@ server_get_context (DBusServer *server)
 
   bd = BUS_SERVER_DATA (server);
 
-  /* every DBusServer in the dbus-daemon has gone through setup_server() */
+  /* every DBusServer in the dbus-daemon's main loop has gone through
+   * bus_context_setup_server() */
   _dbus_assert (bd != NULL);
 
   context = bd->context;
@@ -171,8 +172,13 @@ new_connection_callback (DBusServer     *server,
                          DBusConnection *new_connection,
                          void           *data)
 {
-  BusContext *context = data;
+  bus_context_add_incoming_connection (data, new_connection);
+}
 
+dbus_bool_t
+bus_context_add_incoming_connection (BusContext *context,
+                                     DBusConnection *new_connection)
+{
   if (!bus_connections_setup_connection (context->connections, new_connection))
     {
       _dbus_verbose ("No memory to setup new connection\n");
@@ -183,6 +189,8 @@ new_connection_callback (DBusServer     *server,
        * in general.
        */
       dbus_connection_close (new_connection);
+      /* on OOM, we won't have ref'd the connection so it will die. */
+      return FALSE;
     }
 
   dbus_connection_set_max_received_size (new_connection,
@@ -200,7 +208,7 @@ new_connection_callback (DBusServer     *server,
   dbus_connection_set_allow_anonymous (new_connection,
                                        context->allow_anonymous);
 
-  /* on OOM, we won't have ref'd the connection so it will die. */
+  return TRUE;
 }
 
 static void
@@ -217,6 +225,25 @@ setup_server (BusContext *context,
               char      **auth_mechanisms,
               DBusError  *error)
 {
+  if (!bus_context_setup_server (context, server, error))
+    return FALSE;
+
+  if (!dbus_server_set_auth_mechanisms (server, (const char**) auth_mechanisms))
+    {
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  dbus_server_set_new_connection_function (server, new_connection_callback,
+                                           context, NULL);
+  return TRUE;
+}
+
+dbus_bool_t
+bus_context_setup_server (BusContext                 *context,
+                          DBusServer                 *server,
+                          DBusError                  *error)
+{
   BusServerData *bd;
 
   bd = dbus_new0 (BusServerData, 1);
@@ -230,16 +257,6 @@ setup_server (BusContext *context,
     }
 
   bd->context = context;
-
-  if (!dbus_server_set_auth_mechanisms (server, (const char**) auth_mechanisms))
-    {
-      BUS_SET_OOM (error);
-      return FALSE;
-    }
-
-  dbus_server_set_new_connection_function (server,
-                                           new_connection_callback,
-                                           context, NULL);
 
   if (!dbus_server_set_watch_functions (server,
                                         add_server_watch,

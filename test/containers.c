@@ -55,6 +55,7 @@ typedef struct {
     gint32 handle;
 
     GDBusConnection *unconfined_conn;
+    GDBusConnection *confined_conn;
 } Fixture;
 
 static void
@@ -155,6 +156,9 @@ test_basic (Fixture *f,
 #ifdef HAVE_CONTAINERS_TEST
   GVariant *tuple;
   GVariant *parameters;
+  gchar *path;
+  const gchar *manager_unique_name;
+  const gchar *name_owner;
 
   if (f->skip)
     return;
@@ -183,10 +187,54 @@ test_basic (Fixture *f,
                                                     -1, f->fds, NULL, NULL,
                                                     &f->error);
 
-  /* It's just a stub implementation at the moment */
-  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_NOT_SUPPORTED);
-  g_assert_null (tuple);
-  g_clear_error (&f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(o)");
+  g_variant_get (tuple, "(o)", &path);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  /* Now that we have fd-passed the socket to dbus-daemon, we need to close
+   * our end of it; otherwise the dbus-daemon cannot reliably close it. */
+  g_clear_object (&f->fds);
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Making a method call from confined app...");
+  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+                                       "GetNameOwner",
+                                       g_variant_new ("(s)", DBUS_SERVICE_DBUS),
+                                       G_VARIANT_TYPE ("(s)"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(s)");
+  g_variant_get (tuple, "(&s)", &name_owner);
+  g_assert_cmpstr (name_owner, ==, DBUS_SERVICE_DBUS);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_test_message ("Making a method call from confined app to unconfined...");
+  manager_unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
+  tuple = g_dbus_connection_call_sync (f->confined_conn, manager_unique_name,
+                                       "/", DBUS_INTERFACE_PEER,
+                                       "Ping",
+                                       NULL, G_VARIANT_TYPE_UNIT,
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "()");
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_free (path);
+
 #else /* !HAVE_CONTAINERS_TEST */
   g_test_skip ("fd-passing or gio-unix-2.0 not supported");
 #endif /* !HAVE_CONTAINERS_TEST */
@@ -196,7 +244,7 @@ static void
 test_wrong_handle (Fixture *f,
                    gconstpointer context)
 {
-#ifdef HAVE_UNIX_FD_PASSING
+#ifdef HAVE_CONTAINERS_TEST
   GVariant *tuple;
   GVariant *parameters;
 
@@ -224,16 +272,16 @@ test_wrong_handle (Fixture *f,
   g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
   g_assert_null (tuple);
   g_clear_error (&f->error);
-#else /* !HAVE_UNIX_FD_PASSING */
-  g_test_skip ("fd-passing not supported");
-#endif /* !HAVE_UNIX_FD_PASSING */
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("fd-passing or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
 }
 
 static void
 test_unsupported_parameter (Fixture *f,
                             gconstpointer context)
 {
-#ifdef HAVE_UNIX_FD_PASSING
+#ifdef HAVE_CONTAINERS_TEST
   GVariant *tuple;
   GVariant *parameters;
   GVariantDict named_argument_builder;
@@ -272,16 +320,16 @@ test_unsupported_parameter (Fixture *f,
   g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
   g_assert_null (tuple);
   g_clear_error (&f->error);
-#else /* !HAVE_UNIX_FD_PASSING */
-  g_test_skip ("fd-passing not supported");
-#endif /* !HAVE_UNIX_FD_PASSING */
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("fd-passing or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
 }
 
 static void
 test_invalid_type_name (Fixture *f,
                         gconstpointer context)
 {
-#ifdef HAVE_UNIX_FD_PASSING
+#ifdef HAVE_CONTAINERS_TEST
   GVariant *tuple;
   GVariant *parameters;
 
@@ -314,9 +362,9 @@ test_invalid_type_name (Fixture *f,
   g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
   g_assert_null (tuple);
   g_clear_error (&f->error);
-#else /* !HAVE_UNIX_FD_PASSING */
-  g_test_skip ("fd-passing not supported");
-#endif /* !HAVE_UNIX_FD_PASSING */
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("fd-passing or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
 }
 
 static void
@@ -349,6 +397,16 @@ teardown (Fixture *f,
     }
 
   g_clear_object (&f->unconfined_conn);
+
+  if (f->confined_conn != NULL)
+    {
+      GError *error = NULL;
+
+      g_dbus_connection_close_sync (f->confined_conn, NULL, &error);
+      g_assert_no_error (error);
+    }
+
+  g_clear_object (&f->confined_conn);
 
   if (f->daemon_pid != 0)
     {
