@@ -792,6 +792,69 @@ test_invalid_type_name (Fixture *f,
 #endif /* !HAVE_CONTAINERS_TEST */
 }
 
+/*
+ * Assert that a request to create a container server cannot come from a
+ * connection to an existing container server.
+ * (You cannot put containers in your container so you can sandbox while
+ * you sandbox.)
+ */
+static void
+test_invalid_nesting (Fixture *f,
+                      gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GDBusProxy *nested_proxy;
+  GVariant *tuple;
+  GVariant *parameters;
+
+  if (f->skip)
+    return;
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  if (!add_container_server (f, g_steal_pointer (&parameters)))
+    return;
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Checking that confined app cannot nest containers...");
+  nested_proxy = g_dbus_proxy_new_sync (f->confined_conn,
+                                        G_DBUS_PROXY_FLAGS_NONE, NULL,
+                                        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+                                        DBUS_INTERFACE_CONTAINERS1, NULL,
+                                        &f->error);
+  g_assert_no_error (f->error);
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "inner-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  tuple = g_dbus_proxy_call_sync (nested_proxy, "AddServer",
+                                  g_steal_pointer (&parameters),
+                                  G_DBUS_CALL_FLAGS_NONE,
+                                  -1, NULL, &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_ACCESS_DENIED);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+
+  g_clear_object (&nested_proxy);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -932,6 +995,8 @@ main (int argc,
               setup, test_unsupported_parameter, teardown);
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
               setup, test_invalid_type_name, teardown);
+  g_test_add ("/containers/invalid-nesting", Fixture, NULL,
+              setup, test_invalid_nesting, teardown);
 
   ret = g_test_run ();
 
