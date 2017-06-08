@@ -44,6 +44,9 @@ typedef struct
 /* Data slot on DBusConnection, holding BusContainerManagerData */
 static dbus_int32_t container_manager_data_slot = -1;
 
+/* Data slot on DBusConnection, holding BusContainerInstance */
+static dbus_int32_t contained_data_slot = -1;
+
 struct BusContainers
 {
   int refcount;
@@ -59,6 +62,9 @@ bus_containers_new (void)
   BusContainers *self;
 
   if (!dbus_connection_allocate_data_slot (&container_manager_data_slot))
+    return NULL;
+
+  if (!dbus_connection_allocate_data_slot (&contained_data_slot))
     return NULL;
 
   self = dbus_new0 (BusContainers, 1);
@@ -227,6 +233,14 @@ new_connection_cb (DBusServer     *server,
                    void           *data)
 {
   BusContainerInstance *instance = data;
+
+  if (!dbus_connection_set_data (new_connection, contained_data_slot,
+                                 bus_container_instance_ref (instance),
+                                 (DBusFreeFunction) bus_container_instance_unref))
+    {
+      bus_container_instance_unref (instance);
+      return;
+    }
 
   if (!bus_context_add_incoming_connection (instance->context, new_connection))
     return;
@@ -486,6 +500,35 @@ bus_containers_unref (BusContainers *self)
 
 #endif /* HAVE_UNIX_FD_PASSING */
 
+dbus_bool_t
+bus_containers_connection_is_contained (DBusConnection *connection,
+                                        const char **path,
+                                        const char **type,
+                                        const char **name)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  BusContainerInstance *instance;
+
+  instance = dbus_connection_get_data (connection, contained_data_slot);
+
+  if (instance != NULL)
+    {
+      if (path != NULL)
+        *path = instance->path;
+
+      if (type != NULL)
+        *type = instance->type;
+
+      if (name != NULL)
+        *name = instance->name;
+
+      return TRUE;
+    }
+#endif
+
+  return FALSE;
+}
+
 void
 bus_containers_remove_connection (BusContainers *self,
                                   DBusConnection *connection)
@@ -512,5 +555,6 @@ bus_containers_shutdown (void)
 {
 #ifdef HAVE_UNIX_FD_PASSING
   dbus_connection_free_data_slot (&container_manager_data_slot);
+  dbus_connection_free_data_slot (&contained_data_slot);
 #endif
 }
