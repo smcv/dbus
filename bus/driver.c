@@ -1364,9 +1364,16 @@ bus_driver_handle_add_match (DBusConnection *connection,
     goto failed;
 
   bustype = bus_context_get_type (context);
-  if (bus_match_rule_get_client_is_eavesdropping (rule) &&
-      !bus_apparmor_allows_eavesdropping (connection, bustype, error))
-    goto failed;
+
+  if (bus_match_rule_get_client_is_eavesdropping (rule))
+    {
+      if (!bus_driver_check_caller_is_privileged (connection,
+                                                  transaction,
+                                                  message,
+                                                  error) ||
+          !bus_apparmor_allows_eavesdropping (connection, bustype, error))
+        goto failed;
+    }
 
   matchmaker = bus_connection_get_matchmaker (connection);
 
