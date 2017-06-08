@@ -506,6 +506,119 @@ test_invalid_type_name (Fixture *f,
 }
 
 static void
+test_invalid_nesting (Fixture *f,
+                      gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GDBusProxy *nested_proxy;
+  GSocket *nested_socket;
+  GSocketAddress *nested_socket_address;
+  GUnixFDList *nested_fds;
+  GVariant *tuple;
+  GVariant *parameters;
+  gchar *nested_socket_path;
+  gint32 nested_handle;
+
+  if (f->skip)
+    return;
+
+  fixture_listen (f);
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ssa{sv}ha{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              f->handle,
+                              NULL); /* no named arguments */
+
+  g_test_message ("Calling AddContainerServer...");
+  tuple = g_dbus_proxy_call_with_unix_fd_list_sync (f->proxy,
+                                                    "AddContainerServer",
+                                                    parameters,
+                                                    G_DBUS_CALL_FLAGS_NONE,
+                                                    -1, f->fds, NULL, NULL,
+                                                    &f->error);
+
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(o)");
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Checking that confined app cannot nest containers...");
+  nested_proxy = g_dbus_proxy_new_sync (f->confined_conn,
+                                        G_DBUS_PROXY_FLAGS_NONE, NULL,
+                                        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+                                        DBUS_INTERFACE_CONTAINERS1, NULL,
+                                        &f->error);
+  g_assert_no_error (f->error);
+
+  nested_socket_path = g_build_filename (f->temp_dir, "nested-socket", NULL);
+  nested_socket_address = g_unix_socket_address_new (nested_socket_path);
+  nested_socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM,
+                                G_SOCKET_PROTOCOL_DEFAULT, &f->error);
+  g_assert_no_error (f->error);
+  g_socket_bind (nested_socket, G_SOCKET_ADDRESS (nested_socket_address), FALSE,
+                 &f->error);
+  g_assert_no_error (f->error);
+  g_socket_listen (nested_socket, &f->error);
+  g_assert_no_error (f->error);
+
+  nested_fds = g_unix_fd_list_new ();
+  /* This actually dup()s the socket fd */
+  nested_handle = g_unix_fd_list_append (nested_fds,
+                                         g_socket_get_fd (nested_socket),
+                                         &f->error);
+  g_assert_no_error (f->error);
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ssa{sv}ha{sv})",
+                              "com.example.NotFlatpak",
+                              "inner-app",
+                              NULL, /* no metadata */
+                              nested_handle,
+                              NULL); /* no named arguments */
+
+  tuple = g_dbus_proxy_call_with_unix_fd_list_sync (nested_proxy,
+                                                    "AddContainerServer",
+                                                    parameters,
+                                                    G_DBUS_CALL_FLAGS_NONE,
+                                                    -1, nested_fds, NULL, NULL,
+                                                    &f->error);
+
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_ACCESS_DENIED);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+
+  g_socket_close (nested_socket, &f->error);
+  g_assert_no_error (f->error);
+  g_clear_object (&nested_socket);
+  g_clear_object (&nested_fds);
+  g_clear_object (&nested_socket_address);
+  g_free (nested_socket_path);
+
+  g_clear_object (&nested_proxy);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("fd-passing or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
@@ -575,6 +688,8 @@ main (int argc,
               setup, test_invalid_type_name, teardown);
   g_test_add ("/containers/wrong-handle", Fixture, NULL,
               setup, test_wrong_handle, teardown);
+  g_test_add ("/containers/invalid-nesting", Fixture, NULL,
+              setup, test_invalid_nesting, teardown);
 
   return g_test_run ();
 }
