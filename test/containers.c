@@ -91,6 +91,19 @@ fixture_listen (Fixture *f)
   g_clear_object (&socket);
 }
 
+/* A GDBusNameVanishedCallback that sets a boolean flag. */
+static void
+name_gone_set_boolean_cb (GDBusConnection *conn,
+                          const gchar *name,
+                          gpointer user_data)
+{
+  gboolean *gone_p = user_data;
+
+  g_assert_nonnull (gone_p);
+  g_assert_false (*gone_p);
+  *gone_p = TRUE;
+}
+
 static void
 setup (Fixture *f,
        gconstpointer context)
@@ -233,6 +246,131 @@ test_basic (Fixture *f,
   g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "()");
   g_clear_pointer (&tuple, g_variant_unref);
 
+  g_free (path);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("fd-passing or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
+ * Assert that without special parameters, when the container manager
+ * disappears from the bus, so does the confined server.
+ */
+static void
+test_stop_server_with_manager (Fixture *f,
+                               gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GDBusConnection *second_confined_conn;
+  GSocket *client_socket;
+  GVariant *tuple;
+  GVariant *parameters;
+  gchar *path;
+  const gchar *manager_unique_name;
+  gboolean gone = FALSE;
+  guint name_watch;
+  guint i;
+
+  if (f->skip)
+    return;
+
+  fixture_listen (f);
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ssa{sv}ha{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              f->handle,
+                              NULL); /* no named arguments */
+
+  g_test_message ("Calling AddContainerServer...");
+  tuple = g_dbus_proxy_call_with_unix_fd_list_sync (f->proxy,
+                                                    "AddContainerServer",
+                                                    parameters,
+                                                    G_DBUS_CALL_FLAGS_NONE,
+                                                    -1, f->fds, NULL, NULL,
+                                                    &f->error);
+
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(o)");
+  g_variant_get (tuple, "(o)", &path);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  /* Now that we have fd-passed the socket to dbus-daemon, we need to close
+   * our end of it; otherwise the dbus-daemon cannot reliably close it. */
+  g_clear_object (&f->fds);
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  /* Close the unconfined connection (the container manager) and wait for it
+   * to go away */
+  g_test_message ("Closing container manager...");
+  manager_unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
+  name_watch = g_bus_watch_name_on_connection (f->confined_conn,
+                                               manager_unique_name,
+                                               G_BUS_NAME_WATCHER_FLAGS_NONE,
+                                               NULL, name_gone_set_boolean_cb,
+                                               &gone, NULL);
+  g_dbus_connection_close_sync (f->unconfined_conn, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Waiting for container manager bus name to disappear...");
+
+  while (!gone)
+    g_main_context_iteration (NULL, TRUE);
+
+  g_bus_unwatch_name (name_watch);
+
+  /* Now if we try to connect to the server again, it will fail (eventually -
+   * closing the socket is not synchronous with respect to the name owner
+   * change, so try a few times) */
+  for (i = 0; i < 50; i++)
+    {
+      g_test_message ("Trying to connect to %s again...", f->socket_path);
+      client_socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM,
+                                    G_SOCKET_PROTOCOL_DEFAULT, &f->error);
+      g_assert_no_error (f->error);
+
+      if (!g_socket_connect (client_socket, f->socket_address, NULL,
+                             &f->error))
+        {
+          g_assert_error (f->error, G_IO_ERROR, G_IO_ERROR_CONNECTION_REFUSED);
+          g_clear_error (&f->error);
+          g_clear_object (&client_socket);
+          break;
+        }
+
+      g_clear_object (&client_socket);
+      g_usleep (G_USEC_PER_SEC / 10);
+    }
+
+  /* The same thing happens for a D-Bus connection */
+  g_test_message ("Trying to connect to %s again...", f->socket_dbus_address);
+  second_confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_error (f->error, G_IO_ERROR, G_IO_ERROR_CONNECTION_REFUSED);
+  g_clear_error (&f->error);
+  g_assert_null (second_confined_conn);
+
+  g_clear_object (&f->unconfined_conn);
   g_free (path);
 
 #else /* !HAVE_CONTAINERS_TEST */
@@ -429,6 +567,8 @@ main (int argc,
               setup, test_get_supported_arguments, teardown);
   g_test_add ("/containers/basic", Fixture, NULL,
               setup, test_basic, teardown);
+  g_test_add ("/containers/stop-server-with-manager", Fixture, NULL,
+              setup, test_stop_server_with_manager, teardown);
   g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
               setup, test_unsupported_parameter, teardown);
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
