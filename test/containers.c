@@ -333,6 +333,19 @@ test_basic (Fixture *f,
   g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "()");
   g_clear_pointer (&tuple, g_variant_unref);
 
+  g_test_message ("Checking that confined app is not considered privileged...");
+  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+                                       "UpdateActivationEnvironment",
+                                       g_variant_new ("(a{ss})", NULL),
+                                       G_VARIANT_TYPE_UNIT,
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_ACCESS_DENIED);
+  g_test_message ("Access denied as expected: %s", f->error->message);
+  g_clear_error (&f->error);
+  g_assert_null (tuple);
+
   /* Check that the socket is cleaned up when the dbus-daemon is terminated */
   test_kill_pid (f->daemon_pid);
   g_spawn_close_pid (f->daemon_pid);
