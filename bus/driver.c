@@ -110,6 +110,28 @@ bus_driver_get_conn_helper (DBusConnection  *connection,
   return BUS_DRIVER_FOUND_PEER;
 }
 
+static dbus_bool_t
+bus_driver_check_caller_is_not_container (DBusConnection *connection,
+                                          BusTransaction *transaction,
+                                          DBusMessage    *message,
+                                          DBusError      *error)
+{
+  if (bus_containers_connection_is_contained (connection, NULL, NULL, NULL))
+    {
+      const char *method = dbus_message_get_member (message);
+
+      bus_context_log_and_set_error (bus_transaction_get_context (transaction),
+          DBUS_SYSTEM_LOG_SECURITY, error, DBUS_ERROR_ACCESS_DENIED,
+          "rejected attempt to call %s by connection %s (%s) in "
+          "container", method,
+          nonnull (bus_connection_get_name (connection), "(inactive)"),
+          bus_connection_get_loginfo (connection));
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 /*
  * Log a security warning and set error unless the uid of the connection
  * is either the uid of this process, or on Unix, uid 0 (root).
@@ -129,7 +151,16 @@ bus_driver_check_caller_is_privileged (DBusConnection *connection,
 {
 #ifdef DBUS_UNIX
   unsigned long uid;
+#elif defined(DBUS_WIN)
+  char *windows_sid = NULL;
+  dbus_bool_t ret = FALSE;
+#endif
 
+  if (!bus_driver_check_caller_is_not_container (connection, transaction,
+                                                 message, error))
+    return FALSE;
+
+#ifdef DBUS_UNIX
   if (!dbus_connection_get_unix_user (connection, &uid))
     {
       const char *method = dbus_message_get_member (message);
@@ -169,9 +200,6 @@ bus_driver_check_caller_is_privileged (DBusConnection *connection,
 
   return TRUE;
 #elif defined(DBUS_WIN)
-  char *windows_sid = NULL;
-  dbus_bool_t ret = FALSE;
-
   if (!dbus_connection_get_windows_user (connection, &windows_sid))
     {
       const char *method = dbus_message_get_member (message);
