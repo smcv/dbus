@@ -2577,9 +2577,9 @@ static const MessageHandler monitoring_message_handlers[] = {
 #ifdef DBUS_ENABLE_VERBOSE_MODE
 static const MessageHandler verbose_message_handlers[] = {
   { "EnableVerbose", "", "", bus_driver_handle_enable_verbose,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { "DisableVerbose", "", "", bus_driver_handle_disable_verbose,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { NULL, NULL, NULL, NULL }
 };
 #endif
@@ -2587,11 +2587,11 @@ static const MessageHandler verbose_message_handlers[] = {
 #ifdef DBUS_ENABLE_STATS
 static const MessageHandler stats_message_handlers[] = {
   { "GetStats", "", "a{sv}", bus_stats_handle_get_stats,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { "GetConnectionStats", "s", "a{sv}", bus_stats_handle_get_connection_stats,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { "GetAllMatchRules", "", "a{sas}", bus_stats_handle_get_all_match_rules,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { NULL, NULL, NULL, NULL }
 };
 #endif
