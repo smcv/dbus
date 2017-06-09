@@ -1915,7 +1915,10 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
   DBusMessageIter array_iter;
   unsigned long ulong_uid, ulong_pid;
   char *s;
+  const char *name;
+  const char *path;
   const char *service;
+  const char *type;
   BusDriverFound found;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -2001,6 +2004,19 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
         }
 
       dbus_free (s);
+    }
+
+  if (found == BUS_DRIVER_FOUND_PEER &&
+      bus_containers_connection_is_contained (conn, &path, &type, &name))
+    {
+      if (!_dbus_asv_add_object_path (&array_iter,
+                                      DBUS_INTERFACE_CONTAINERS1 ".Instance",
+                                      path) ||
+          !_dbus_asv_add_string (&array_iter,
+                                 DBUS_INTERFACE_CONTAINERS1 ".Type", type) ||
+          !_dbus_asv_add_string (&array_iter,
+                                 DBUS_INTERFACE_CONTAINERS1 ".Name", name))
+        goto oom;
     }
 
   if (!_dbus_asv_close (&reply_iter, &array_iter))
