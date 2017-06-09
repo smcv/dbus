@@ -80,11 +80,6 @@ typedef struct {
   VoidFunc unlock;
 } Thread;
 
-/* provide backwards compatibility shim when building with a glib <= 2.30.x */
-#if !GLIB_CHECK_VERSION(2,31,0)
-#define g_thread_new(name,func,data) g_thread_create(func,data,TRUE,NULL)
-#endif
-
 static gpointer
 ref_thread (gpointer data)
 {

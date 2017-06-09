@@ -263,13 +263,13 @@ fi
 # or binaries.
 
 AC_DEFINE([GLIB_VERSION_MIN_REQUIRED], [GLIB_VERSION_2_36], [Ignore post-2.36 deprecations])
-AC_DEFINE([GLIB_VERSION_MAX_ALLOWED], [GLIB_VERSION_2_38], [Prevent post-2.38 APIs])
+AC_DEFINE([GLIB_VERSION_MAX_ALLOWED], [GLIB_VERSION_2_40], [Prevent post-2.40 APIs])
 
 with_glib=yes
 
 AS_IF([test "x$enable_modular_tests" != xno],
   [
-  PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.36, gio-2.0 >= 2.36],
+  PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.40, gio-2.0 >= 2.40],
     [
       AS_IF([test "x$dbus_unix" = xyes],
         [PKG_CHECK_MODULES([GIO_UNIX], [gio-unix-2.0],
