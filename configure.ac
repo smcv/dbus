@@ -262,7 +262,7 @@ fi
 # default (unless you don't have GLib), because they don't bloat the library
 # or binaries.
 
-AC_DEFINE([GLIB_VERSION_MIN_REQUIRED], [GLIB_VERSION_2_36], [Ignore post-2.36 deprecations])
+AC_DEFINE([GLIB_VERSION_MIN_REQUIRED], [GLIB_VERSION_2_40], [Ignore post-2.40 deprecations])
 AC_DEFINE([GLIB_VERSION_MAX_ALLOWED], [GLIB_VERSION_2_40], [Prevent post-2.40 APIs])
 
 with_glib=yes
