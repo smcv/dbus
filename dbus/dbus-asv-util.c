@@ -261,6 +261,42 @@ _dbus_asv_add_string (DBusMessageIter *arr_iter,
 
 /**
  * Create a new entry in an a{sv} (map from string to variant)
+ * with an object-path value.
+ *
+ * If this function fails, the a{sv} must be abandoned, for instance
+ * with _dbus_asv_abandon().
+ *
+ * @param arr_iter the iterator which is appending to the array
+ * @param key a UTF-8 key for the map
+ * @param value the value
+ * @returns #TRUE on success, or #FALSE if not enough memory
+ */
+dbus_bool_t
+_dbus_asv_add_object_path (DBusMessageIter *arr_iter,
+                           const char *key,
+                           const char *value)
+{
+  DBusMessageIter entry_iter, var_iter;
+
+  if (!_dbus_asv_open_entry (arr_iter, &entry_iter, key,
+                             DBUS_TYPE_OBJECT_PATH_AS_STRING, &var_iter))
+    return FALSE;
+
+  if (!dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_OBJECT_PATH,
+                                       &value))
+    {
+      _dbus_asv_abandon_entry (arr_iter, &entry_iter, &var_iter);
+      return FALSE;
+    }
+
+  if (!_dbus_asv_close_entry (arr_iter, &entry_iter, &var_iter))
+    return FALSE;
+
+  return TRUE;
+}
+
+/**
+ * Create a new entry in an a{sv} (map from string to variant)
  * with a byte array value.
  *
  * If this function fails, the a{sv} must be abandoned, for instance
