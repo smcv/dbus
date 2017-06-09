@@ -2397,8 +2397,14 @@ typedef enum
 
   /* If set, callers must be privileged. On Unix, the uid of the connection
    * must either be the uid of this process, or 0 (root). On Windows,
-   * the SID of the connection must be the SID of this process. */
+   * the SID of the connection must be the SID of this process.
+   *
+   * This flag effectively implies METHOD_FLAG_NO_CONTAINERS, because
+   * containers are never privileged. */
   METHOD_FLAG_PRIVILEGED = (1 << 1),
+
+  /* If set, callers must not be associated with a container instance. */
+  METHOD_FLAG_NO_CONTAINERS = (1 << 2),
 
   METHOD_FLAG_NONE = 0
 } MethodFlags;
@@ -2965,12 +2971,25 @@ bus_driver_handle_message (DBusConnection *connection,
 
           _dbus_verbose ("Found driver handler for %s\n", name);
 
-          if ((mh->flags & METHOD_FLAG_PRIVILEGED) &&
-              !bus_driver_check_caller_is_privileged (connection, transaction,
-                                                      message, error))
+          if (mh->flags & METHOD_FLAG_PRIVILEGED)
             {
-              _DBUS_ASSERT_ERROR_IS_SET (error);
-              return FALSE;
+              if (!bus_driver_check_caller_is_privileged (connection,
+                                                          transaction, message,
+                                                          error))
+                {
+                  _DBUS_ASSERT_ERROR_IS_SET (error);
+                  return FALSE;
+                }
+            }
+          else if (mh->flags & METHOD_FLAG_NO_CONTAINERS)
+            {
+              if (!bus_driver_check_caller_is_not_container (connection,
+                                                             transaction,
+                                                             message, error))
+                {
+                  _DBUS_ASSERT_ERROR_IS_SET (error);
+                  return FALSE;
+                }
             }
 
           if (!(is_canonical_path || (mh->flags & METHOD_FLAG_ANY_PATH)))
