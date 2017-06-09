@@ -33,6 +33,16 @@ dbus_bool_t bus_containers_handle_add_container_server (DBusConnection *connecti
                                                         DBusMessage    *message,
                                                         DBusError      *error);
 
+dbus_bool_t bus_containers_handle_get_container_instance_info (DBusConnection *connection,
+                                                               BusTransaction *transaction,
+                                                               DBusMessage    *message,
+                                                               DBusError      *error);
+
+dbus_bool_t bus_containers_handle_get_connection_container_instance (DBusConnection *connection,
+                                                                     BusTransaction *transaction,
+                                                                     DBusMessage    *message,
+                                                                     DBusError      *error);
+
 dbus_bool_t bus_containers_supported_arguments_getter (BusContext *context,
                                                        DBusMessageIter *var_iter);
 

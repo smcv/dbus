@@ -2576,6 +2576,12 @@ static const MessageHandler containers_message_handlers[] = {
   { "AddContainerServer", "ssa{sv}ha{sv}", "",
     bus_containers_handle_add_container_server,
     METHOD_FLAG_PRIVILEGED },
+  { "GetConnectionContainerInstance", "s", "ossa{sv}",
+    bus_containers_handle_get_connection_container_instance,
+    METHOD_FLAG_NONE },
+  { "GetContainerInstanceInfo", "o", "ssa{sv}",
+    bus_containers_handle_get_container_instance_info,
+    METHOD_FLAG_NONE },
   { NULL, NULL, NULL, NULL }
 };
 static const PropertyHandler containers_property_handlers[] = {

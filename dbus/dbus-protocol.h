@@ -455,6 +455,9 @@ extern "C" {
  * but could have succeeded if an interactive authorization step was
  * allowed. */
 #define DBUS_ERROR_INTERACTIVE_AUTHORIZATION_REQUIRED "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired"
+/** The connection is not from a container, or the specified container instance
+ * does not exist. */
+#define DBUS_ERROR_NOT_CONTAINER "org.freedesktop.DBus.Error.NotContainer"
 
 /* XML introspection format */
 

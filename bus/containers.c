@@ -32,6 +32,7 @@
 #include "dbus/dbus-sysdeps-unix.h"
 
 #include "connection.h"
+#include "driver.h"
 #include "utils.h"
 
 /* Data attached to a DBusConnection that has created container instances. */
@@ -479,6 +480,147 @@ bus_containers_supported_arguments_getter (BusContext *context,
                                            DBUS_TYPE_STRING_AS_STRING,
                                            &arr_iter) &&
          dbus_message_iter_close_container (var_iter, &arr_iter);
+}
+
+dbus_bool_t
+bus_containers_handle_get_connection_container_instance (DBusConnection *caller,
+                                                         BusTransaction *transaction,
+                                                         DBusMessage    *message,
+                                                         DBusError      *error)
+{
+  BusContainerInstance *instance;
+  BusDriverFound found;
+  DBusConnection *subject;
+  DBusMessage *reply = NULL;
+  DBusMessageIter writer;
+  const char *bus_name;
+
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  found = bus_driver_get_conn_helper (caller, message, "container instance",
+                                      &bus_name, &subject, error);
+
+  switch (found)
+    {
+      case BUS_DRIVER_FOUND_SELF:
+        dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
+                        "The message bus is not in a container");
+        goto failed;
+
+      case BUS_DRIVER_FOUND_PEER:
+        break;
+
+      case BUS_DRIVER_FOUND_ERROR:
+        /* fall through */
+      default:
+        goto failed;
+    }
+
+  instance = dbus_connection_get_data (subject, contained_data_slot);
+
+  if (instance == NULL)
+    {
+      dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
+                      "Connection '%s' is not in a container", bus_name);
+      goto failed;
+    }
+
+  reply = dbus_message_new_method_return (message);
+
+  if (reply == NULL)
+    goto oom;
+
+  if (!dbus_message_append_args (reply,
+                                 DBUS_TYPE_OBJECT_PATH, &instance->path,
+                                 DBUS_TYPE_STRING, &instance->type,
+                                 DBUS_TYPE_STRING, &instance->name,
+                                 DBUS_TYPE_INVALID))
+    goto oom;
+
+  dbus_message_iter_init_append (reply, &writer);
+
+  if (!_dbus_variant_write (instance->metadata, &writer))
+    goto oom;
+
+  if (!bus_transaction_send_from_driver (transaction, caller, reply))
+    goto oom;
+
+  dbus_message_unref (reply);
+  return TRUE;
+
+oom:
+  BUS_SET_OOM (error);
+  /* fall through */
+failed:
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+
+  if (reply != NULL)
+    dbus_message_unref (reply);
+
+  return FALSE;
+}
+
+dbus_bool_t
+bus_containers_handle_get_container_instance_info (DBusConnection *connection,
+                                                   BusTransaction *transaction,
+                                                   DBusMessage    *message,
+                                                   DBusError      *error)
+{
+  BusContext *context;
+  BusContainers *containers;
+  BusContainerInstance *instance = NULL;
+  DBusMessage *reply = NULL;
+  DBusMessageIter writer;
+  const char *path;
+
+  if (!dbus_message_get_args (message, error,
+                              DBUS_TYPE_STRING, &path,
+                              DBUS_TYPE_INVALID))
+    goto failed;
+
+  context = bus_transaction_get_context (transaction);
+  containers = bus_context_get_containers (context);
+
+  if (containers->instances_by_path != NULL)
+    {
+      instance = _dbus_hash_table_lookup_string (containers->instances_by_path,
+                                                 path);
+    }
+
+  if (instance == NULL)
+    {
+      dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
+                      "There is no container with path '%s'", path);
+      goto failed;
+    }
+
+  if (!dbus_message_append_args (reply,
+                                 DBUS_TYPE_STRING, &instance->type,
+                                 DBUS_TYPE_STRING, &instance->name,
+                                 DBUS_TYPE_INVALID))
+    goto oom;
+
+  dbus_message_iter_init_append (reply, &writer);
+
+  if (!_dbus_variant_write (instance->metadata, &writer))
+    goto oom;
+
+  if (!bus_transaction_send_from_driver (transaction, connection, reply))
+    goto oom;
+
+  dbus_message_unref (reply);
+  return TRUE;
+
+oom:
+  BUS_SET_OOM (error);
+  /* fall through */
+failed:
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+
+  if (reply != NULL)
+    dbus_message_unref (reply);
+
+  return FALSE;
 }
 
 #else
