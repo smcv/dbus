@@ -50,11 +50,10 @@ setup (Fixture *f,
 #define MESSAGE "regression test for _dbus_log(): "
 
 static void
-test_syslog (Fixture *f,
+test_syslog_fatal (Fixture *f,
     gconstpointer data)
 {
-#ifndef G_OS_WIN32
-  if (g_test_trap_fork (0, 0))
+  if (g_test_subprocess ())
     {
       _dbus_init_system_log ("test-syslog",
           DBUS_LOG_FLAGS_SYSTEM_LOG | DBUS_LOG_FLAGS_STDERR);
@@ -64,10 +63,16 @@ test_syslog (Fixture *f,
       exit (0);
     }
 
+  g_test_trap_subprocess (NULL, 0, 0);
   g_test_trap_assert_failed ();
   g_test_trap_assert_stderr ("*" MESSAGE "23\n*");
+}
 
-  if (g_test_trap_fork (0, 0))
+static void
+test_syslog_normal (Fixture *f,
+    gconstpointer data)
+{
+  if (g_test_subprocess ())
     {
       _dbus_init_system_log ("test-syslog",
           DBUS_LOG_FLAGS_SYSTEM_LOG | DBUS_LOG_FLAGS_STDERR);
@@ -89,6 +94,7 @@ test_syslog (Fixture *f,
       exit (0);
     }
 
+  g_test_trap_subprocess (NULL, 0, 0);
   g_test_trap_assert_passed ();
   g_test_trap_assert_stderr ("*" MESSAGE "42\n"
                              "*" MESSAGE "45\n"
@@ -101,21 +107,6 @@ test_syslog (Fixture *f,
   g_test_trap_assert_stderr_unmatched ("*this should appear in the syslog "
                                        "only*");
   g_test_trap_assert_stderr_unmatched ("*test-syslog-only*");
-#endif
-  /* manual test (this is the best we can do on Windows) */
-  _dbus_init_system_log ("test-syslog",
-          DBUS_LOG_FLAGS_SYSTEM_LOG | DBUS_LOG_FLAGS_STDERR);
-  _dbus_log (DBUS_SYSTEM_LOG_INFO, MESSAGE "%d", 42);
-  _dbus_log (DBUS_SYSTEM_LOG_WARNING, MESSAGE "%d", 45);
-  _dbus_log (DBUS_SYSTEM_LOG_SECURITY, MESSAGE "%d", 666);
-
-  _dbus_init_system_log ("test-syslog-stderr", DBUS_LOG_FLAGS_STDERR);
-  _dbus_log (DBUS_SYSTEM_LOG_INFO, MESSAGE "this should not appear in the syslog");
-  _dbus_init_system_log ("test-syslog-both",
-      DBUS_LOG_FLAGS_SYSTEM_LOG | DBUS_LOG_FLAGS_STDERR);
-  _dbus_log (DBUS_SYSTEM_LOG_INFO, MESSAGE "this should appear in the syslog and on stderr");
-  _dbus_init_system_log ("test-syslog-only", DBUS_LOG_FLAGS_SYSTEM_LOG);
-  _dbus_log (DBUS_SYSTEM_LOG_INFO, MESSAGE "this should appear in the syslog only");
 }
 
 static void
@@ -130,7 +121,10 @@ main (int argc,
 {
   test_init (&argc, &argv);
 
-  g_test_add ("/syslog", Fixture, NULL, setup, test_syslog, teardown);
+  g_test_add ("/syslog/fatal", Fixture, NULL, setup, test_syslog_fatal,
+              teardown);
+  g_test_add ("/syslog/normal", Fixture, NULL, setup, test_syslog_normal,
+              teardown);
 
   return g_test_run ();
 }
