@@ -517,6 +517,10 @@ test_creds (Fixture *f,
           g_assert_not_reached ();
 #endif
         }
+      else if (g_str_has_prefix (name, DBUS_INTERFACE_CONTAINERS1 "."))
+        {
+          g_assert_not_reached ();
+        }
 
       dbus_message_iter_next (&arr_iter);
     }
