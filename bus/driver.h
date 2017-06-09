@@ -27,6 +27,13 @@
 #include <dbus/dbus.h>
 #include "connection.h"
 
+typedef enum
+{
+  BUS_DRIVER_FOUND_SELF,
+  BUS_DRIVER_FOUND_PEER,
+  BUS_DRIVER_FOUND_ERROR,
+} BusDriverFound;
+
 void        bus_driver_remove_connection     (DBusConnection *connection);
 dbus_bool_t bus_driver_handle_message        (DBusConnection *connection,
                                               BusTransaction *transaction,
@@ -48,5 +55,12 @@ dbus_bool_t bus_driver_send_service_owner_changed  (const char     *service_name
 dbus_bool_t bus_driver_generate_introspect_string  (DBusString *xml,
                                                     dbus_bool_t canonical_path,
                                                     DBusMessage *message);
+
+BusDriverFound bus_driver_get_conn_helper (DBusConnection  *connection,
+                                           DBusMessage     *message,
+                                           const char      *what_we_want,
+                                           const char     **name_p,
+                                           DBusConnection **peer_conn_p,
+                                           DBusError       *error);
 
 #endif /* BUS_DRIVER_H */

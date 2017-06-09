@@ -43,13 +43,6 @@
 #include <dbus/dbus-marshal-validate.h>
 #include <string.h>
 
-typedef enum
-{
-  BUS_DRIVER_FOUND_SELF,
-  BUS_DRIVER_FOUND_PEER,
-  BUS_DRIVER_FOUND_ERROR,
-} BusDriverFound;
-
 static inline const char *
 nonnull (const char *maybe_null,
          const char *if_null)
@@ -75,7 +68,7 @@ bus_driver_get_owner_of_name (DBusConnection *connection,
   return bus_service_get_primary_owners_connection (serv);
 }
 
-static BusDriverFound
+BusDriverFound
 bus_driver_get_conn_helper (DBusConnection  *connection,
                             DBusMessage     *message,
                             const char      *what_we_want,

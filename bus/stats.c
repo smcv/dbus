@@ -120,37 +120,37 @@ bus_stats_handle_get_connection_stats (DBusConnection *caller_connection,
                                        DBusMessage    *message,
                                        DBusError      *error)
 {
-  const char *bus_name = NULL;
-  DBusString bus_name_str;
+  BusDriverFound found;
   DBusMessage *reply = NULL;
   DBusMessageIter iter, arr_iter;
   static dbus_uint32_t stats_serial = 0;
   dbus_uint32_t in_messages, in_bytes, in_fds, in_peak_bytes, in_peak_fds;
   dbus_uint32_t out_messages, out_bytes, out_fds, out_peak_bytes, out_peak_fds;
-  BusRegistry *registry;
-  BusService *service;
   DBusConnection *stats_connection;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  registry = bus_connection_get_registry (caller_connection);
+  found = bus_driver_get_conn_helper (caller_connection, message,
+                                      "statistics", NULL, &stats_connection,
+                                      error);
 
-  if (! dbus_message_get_args (message, error,
-                               DBUS_TYPE_STRING, &bus_name,
-                               DBUS_TYPE_INVALID))
-      return FALSE;
-
-  _dbus_string_init_const (&bus_name_str, bus_name);
-  service = bus_registry_lookup (registry, &bus_name_str);
-
-  if (service == NULL)
+  switch (found)
     {
-      dbus_set_error (error, DBUS_ERROR_NAME_HAS_NO_OWNER,
-                      "Bus name '%s' has no owner", bus_name);
-      return FALSE;
+      case BUS_DRIVER_FOUND_SELF:
+        dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
+                        "GetConnectionStats is not meaningful for the "
+                        "message bus \"%s\" itself", DBUS_SERVICE_DBUS);
+        goto failed;
+
+      case BUS_DRIVER_FOUND_PEER:
+        break;
+
+      case BUS_DRIVER_FOUND_ERROR:
+        /* fall through */
+      default:
+        goto failed;
     }
 
-  stats_connection = bus_service_get_primary_owners_connection (service);
   _dbus_assert (stats_connection != NULL);
 
   reply = _dbus_asv_new_method_return (message, &iter, &arr_iter);
@@ -212,10 +212,12 @@ bus_stats_handle_get_connection_stats (DBusConnection *caller_connection,
   return TRUE;
 
 oom:
+  BUS_SET_OOM (error);
+  /* fall through */
+failed:
   if (reply != NULL)
     dbus_message_unref (reply);
 
-  BUS_SET_OOM (error);
   return FALSE;
 }
 
