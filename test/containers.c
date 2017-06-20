@@ -25,6 +25,8 @@
 
 #include <config.h>
 
+#include <errno.h>
+
 #include <dbus/dbus.h>
 
 #include <gio/gio.h>
@@ -32,9 +34,14 @@
 #include <glib/gstdio.h>
 
 #if defined(DBUS_ENABLE_CONTAINERS) && defined(HAVE_GIO_UNIX)
+
 #define HAVE_CONTAINERS_TEST
+
 #include <gio/gunixfdlist.h>
 #include <gio/gunixsocketaddress.h>
+
+#include "dbus/dbus-sysdeps-unix.h"
+
 #endif
 
 #include "test-utils-glib.h"
@@ -47,7 +54,11 @@ typedef struct {
 
     GDBusProxy *proxy;
 
+    gchar *instance_path;
+    gchar *socket_path;
+    gchar *socket_dbus_address;
     GDBusConnection *unconfined_conn;
+    GDBusConnection *confined_conn;
 } Fixture;
 
 static void
@@ -111,6 +122,148 @@ test_get_supported_arguments (Fixture *f,
   v = g_dbus_proxy_get_cached_property (f->proxy, "SupportedArguments");
   g_assert_null (v);
 #endif /* !DBUS_ENABLE_CONTAINERS */
+}
+
+#ifdef HAVE_CONTAINERS_TEST
+/*
+ * Try to make an AddServer call that usually succeeds, but may fail and
+ * be skipped if we are running as root and this version of dbus has not
+ * been fully installed. Return TRUE if we can continue.
+ *
+ * parameters is sunk if it is a floating reference.
+ */
+static gboolean
+add_container_server (Fixture *f,
+                      GVariant *parameters)
+{
+  GVariant *tuple;
+  GStatBuf stat_buf;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Calling AddServer...");
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer", parameters,
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+
+  /* For root, the sockets go in /run/dbus/containers, which we rely on
+   * system infrastructure to create; so it's OK for AddServer to fail
+   * when uninstalled, although not OK if it fails as an installed-test. */
+  if (f->error != NULL &&
+      _dbus_getuid () == 0 &&
+      _dbus_getenv ("DBUS_TEST_UNINSTALLED") != NULL)
+    {
+      g_test_message ("AddServer: %s", f->error->message);
+      g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_FILE_NOT_FOUND);
+      g_test_skip ("AddServer failed, probably because this dbus "
+                   "version is not fully installed");
+      return FALSE;
+    }
+
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(oays)");
+  g_variant_get (tuple, "(o^ays)", &f->instance_path, &f->socket_path,
+                 &f->socket_dbus_address);
+  g_assert_true (g_str_has_prefix (f->socket_dbus_address, "unix:"));
+  g_assert_null (strchr (f->socket_dbus_address, ';'));
+  g_assert_null (strchr (f->socket_dbus_address + strlen ("unix:"), ':'));
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_assert_nonnull (f->instance_path);
+  g_assert_true (g_variant_is_object_path (f->instance_path));
+  g_assert_nonnull (f->socket_path);
+  g_assert_true (g_path_is_absolute (f->socket_path));
+  g_assert_nonnull (f->socket_dbus_address);
+  g_assert_cmpstr (g_stat (f->socket_path, &stat_buf) == 0 ? NULL :
+                   g_strerror (errno), ==, NULL);
+  g_assert_cmpuint ((stat_buf.st_mode & S_IFMT), ==, S_IFSOCK);
+  return TRUE;
+}
+#endif
+
+/*
+ * Assert that a simple AddServer() call succeeds and has the behaviour
+ * we expect (we can connect a confined connection to it, the confined
+ * connection can talk to the dbus-daemon and to an unconfined connection,
+ * and the socket gets cleaned up when the dbus-daemon terminates).
+ */
+static void
+test_basic (Fixture *f,
+            gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GVariant *parameters;
+  const gchar *manager_unique_name;
+  const gchar *name_owner;
+  GStatBuf stat_buf;
+  GVariant *tuple;
+
+  if (f->skip)
+    return;
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  if (!add_container_server (f, g_steal_pointer (&parameters)))
+    return;
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Making a method call from confined app...");
+  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+                                       "GetNameOwner",
+                                       g_variant_new ("(s)", DBUS_SERVICE_DBUS),
+                                       G_VARIANT_TYPE ("(s)"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(s)");
+  g_variant_get (tuple, "(&s)", &name_owner);
+  g_assert_cmpstr (name_owner, ==, DBUS_SERVICE_DBUS);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_test_message ("Making a method call from confined app to unconfined...");
+  manager_unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
+  tuple = g_dbus_connection_call_sync (f->confined_conn, manager_unique_name,
+                                       "/", DBUS_INTERFACE_PEER,
+                                       "Ping",
+                                       NULL, G_VARIANT_TYPE_UNIT,
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "()");
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  /* Check that the socket is cleaned up when the dbus-daemon is terminated */
+  test_kill_pid (f->daemon_pid);
+  g_spawn_close_pid (f->daemon_pid);
+  f->daemon_pid = 0;
+
+  while (g_stat (f->socket_path, &stat_buf) == 0)
+    g_usleep (G_USEC_PER_SEC / 20);
+
+  g_assert_cmpint (errno, ==, ENOENT);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
 }
 
 /*
@@ -218,6 +371,20 @@ teardown (Fixture *f,
 
   g_clear_object (&f->unconfined_conn);
 
+  if (f->confined_conn != NULL)
+    {
+      GError *error = NULL;
+
+      g_dbus_connection_close_sync (f->confined_conn, NULL, &error);
+
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+        g_clear_error (&error);
+      else
+        g_assert_no_error (error);
+    }
+
+  g_clear_object (&f->confined_conn);
+
   if (f->daemon_pid != 0)
     {
       test_kill_pid (f->daemon_pid);
@@ -225,6 +392,9 @@ teardown (Fixture *f,
       f->daemon_pid = 0;
     }
 
+  g_free (f->instance_path);
+  g_free (f->socket_path);
+  g_free (f->socket_dbus_address);
   g_free (f->bus_address);
   g_clear_error (&f->error);
 }
@@ -237,6 +407,8 @@ main (int argc,
 
   g_test_add ("/containers/get-supported-arguments", Fixture, NULL,
               setup, test_get_supported_arguments, teardown);
+  g_test_add ("/containers/basic", Fixture, NULL,
+              setup, test_basic, teardown);
   g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
               setup, test_unsupported_parameter, teardown);
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
