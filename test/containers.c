@@ -61,12 +61,52 @@ typedef struct {
     GDBusConnection *confined_conn;
 } Fixture;
 
+typedef struct
+{
+  const gchar *config_file;
+  enum
+    {
+      STOP_SERVER_EXPLICITLY,
+      STOP_SERVER_DISCONNECT_FIRST,
+      STOP_SERVER_NEVER_CONNECTED,
+      STOP_SERVER_FORCE,
+      STOP_SERVER_WITH_MANAGER
+    }
+  stop_server;
+} Config;
+
+static const Config default_config =
+{
+  NULL,
+  0 /* not used, the stop-server test always uses non-default config */
+};
+
+#ifdef DBUS_ENABLE_CONTAINERS
+/* A GDBusNameVanishedCallback that sets a boolean flag. */
+static void
+name_gone_set_boolean_cb (GDBusConnection *conn,
+                          const gchar *name,
+                          gpointer user_data)
+{
+  gboolean *gone_p = user_data;
+
+  g_assert_nonnull (gone_p);
+  g_assert_false (*gone_p);
+  *gone_p = TRUE;
+}
+#endif
+
 static void
 setup (Fixture *f,
        gconstpointer context)
 {
-  f->bus_address = test_get_dbus_daemon (NULL, TEST_USER_ME, NULL,
-                                         &f->daemon_pid);
+  const Config *config = context;
+
+  if (config == NULL)
+    config = &default_config;
+
+  f->bus_address = test_get_dbus_daemon (config->config_file, TEST_USER_ME,
+                                         NULL, &f->daemon_pid);
 
   if (f->bus_address == NULL)
     {
@@ -310,6 +350,275 @@ test_wrong_uid (Fixture *f,
 }
 
 /*
+ * With config->stop_server == STOP_SERVER_WITH_MANAGER:
+ * Assert that without special parameters, when the container manager
+ * disappears from the bus, so does the confined server.
+ *
+ * With config->stop_server == STOP_SERVER_EXPLICITLY or
+ * config->stop_server == STOP_SERVER_DISCONNECT_FIRST:
+ * Test StopListening(), which just closes the listening socket.
+ *
+ * With config->stop_server == STOP_SERVER_FORCE:
+ * Test StopInstance(), which closes the listening socket and
+ * disconnects all its clients.
+ */
+static void
+test_stop_server (Fixture *f,
+                  gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const Config *config = context;
+  GDBusConnection *attacker;
+  GDBusConnection *second_confined_conn;
+  GDBusProxy *attacker_proxy;
+  GSocket *client_socket;
+  GSocketAddress *socket_address;
+  GVariant *tuple;
+  GVariant *parameters;
+  const gchar *confined_unique_name;
+  const gchar *manager_unique_name;
+  const gchar *name_owner;
+  gboolean gone = FALSE;
+  guint name_watch;
+  guint i;
+
+  g_assert_nonnull (config);
+
+  if (f->skip)
+    return;
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  if (!add_container_server (f, g_steal_pointer (&parameters)))
+    return;
+
+  socket_address = g_unix_socket_address_new (f->socket_path);
+
+  if (config->stop_server != STOP_SERVER_NEVER_CONNECTED)
+    {
+      g_test_message ("Connecting to %s...", f->socket_dbus_address);
+      f->confined_conn = g_dbus_connection_new_for_address_sync (
+          f->socket_dbus_address,
+          (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+           G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+          NULL, NULL, &f->error);
+      g_assert_no_error (f->error);
+
+      if (config->stop_server == STOP_SERVER_DISCONNECT_FIRST)
+        {
+          g_test_message ("Disconnecting confined connection...");
+          gone = FALSE;
+          confined_unique_name = g_dbus_connection_get_unique_name (
+              f->confined_conn);
+          name_watch = g_bus_watch_name_on_connection (f->unconfined_conn,
+                                                       confined_unique_name,
+                                                       G_BUS_NAME_WATCHER_FLAGS_NONE,
+                                                       NULL,
+                                                       name_gone_set_boolean_cb,
+                                                       &gone, NULL);
+          g_dbus_connection_close_sync (f->confined_conn, NULL, &f->error);
+          g_assert_no_error (f->error);
+
+          g_test_message ("Waiting for confined app bus name to disappear...");
+
+          while (!gone)
+            g_main_context_iteration (NULL, TRUE);
+
+          g_bus_unwatch_name (name_watch);
+        }
+    }
+
+  /* If we are able to switch uid (i.e. we are root), check that a local
+   * attacker with a different uid cannot close our container instances. */
+  attacker = test_try_connect_gdbus_as_user (f->bus_address, TEST_USER_OTHER,
+                                             &f->error);
+
+  if (attacker != NULL)
+    {
+      attacker_proxy = g_dbus_proxy_new_sync (attacker,
+                                              G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                              NULL, DBUS_SERVICE_DBUS,
+                                              DBUS_PATH_DBUS,
+                                              DBUS_INTERFACE_CONTAINERS1, NULL,
+                                              &f->error);
+      g_assert_no_error (f->error);
+
+      tuple = g_dbus_proxy_call_sync (attacker_proxy, "StopListening",
+                                      g_variant_new ("(o)", f->instance_path),
+                                      G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                      &f->error);
+      g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_ACCESS_DENIED);
+      g_assert_null (tuple);
+      g_clear_error (&f->error);
+
+      tuple = g_dbus_proxy_call_sync (attacker_proxy, "StopInstance",
+                                      g_variant_new ("(o)", f->instance_path),
+                                      G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                      &f->error);
+      g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_ACCESS_DENIED);
+      g_assert_null (tuple);
+      g_clear_error (&f->error);
+
+      g_clear_object (&attacker_proxy);
+      g_dbus_connection_close_sync (attacker, NULL, &f->error);
+      g_assert_no_error (f->error);
+      g_clear_object (&attacker);
+    }
+  else
+    {
+      /* If we aren't running as root, it's OK to not be able to connect again
+       * as some other user (usually 'nobody'). We don't g_test_skip() here
+       * because this is just extra coverage */
+      g_assert_error (f->error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED);
+      g_clear_error (&f->error);
+    }
+
+  switch (config->stop_server)
+    {
+      case STOP_SERVER_WITH_MANAGER:
+        /* Close the unconfined connection (the container manager) and wait
+         * for it to go away */
+        g_test_message ("Closing container manager...");
+        manager_unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
+        name_watch = g_bus_watch_name_on_connection (f->confined_conn,
+                                                     manager_unique_name,
+                                                     G_BUS_NAME_WATCHER_FLAGS_NONE,
+                                                     NULL,
+                                                     name_gone_set_boolean_cb,
+                                                     &gone, NULL);
+        g_dbus_connection_close_sync (f->unconfined_conn, NULL, &f->error);
+        g_assert_no_error (f->error);
+
+        g_test_message ("Waiting for container manager bus name to disappear...");
+
+        while (!gone)
+          g_main_context_iteration (NULL, TRUE);
+
+        g_bus_unwatch_name (name_watch);
+        break;
+
+      case STOP_SERVER_EXPLICITLY:
+      case STOP_SERVER_DISCONNECT_FIRST:
+      case STOP_SERVER_NEVER_CONNECTED:
+        g_test_message ("Stopping server (but not confined connection)...");
+        tuple = g_dbus_proxy_call_sync (f->proxy, "StopListening",
+                                        g_variant_new ("(o)", f->instance_path),
+                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                        &f->error);
+        g_assert_no_error (f->error);
+        g_variant_unref (tuple);
+        break;
+
+      case STOP_SERVER_FORCE:
+        g_test_message ("Stopping server and all confined connections...");
+        tuple = g_dbus_proxy_call_sync (f->proxy, "StopInstance",
+                                        g_variant_new ("(o)", f->instance_path),
+                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                        &f->error);
+        g_assert_no_error (f->error);
+        g_variant_unref (tuple);
+        break;
+
+      default:
+        g_assert_not_reached ();
+    }
+
+  /* Now if we try to connect to the server again, it will fail (eventually -
+   * closing the socket is not synchronous with respect to the name owner
+   * change, so try a few times) */
+  for (i = 0; i < 50; i++)
+    {
+      g_test_message ("Trying to connect to %s again...", f->socket_path);
+      client_socket = g_socket_new (G_SOCKET_FAMILY_UNIX, G_SOCKET_TYPE_STREAM,
+                                    G_SOCKET_PROTOCOL_DEFAULT, &f->error);
+      g_assert_no_error (f->error);
+
+      if (!g_socket_connect (client_socket, socket_address, NULL, &f->error))
+        {
+          g_assert_cmpstr (g_quark_to_string (f->error->domain), ==,
+                           g_quark_to_string (G_IO_ERROR));
+
+          if (f->error->code != G_IO_ERROR_CONNECTION_REFUSED &&
+              f->error->code != G_IO_ERROR_NOT_FOUND)
+            g_error ("Unexpected error code %d", f->error->code);
+
+          g_clear_error (&f->error);
+          g_clear_object (&client_socket);
+          break;
+        }
+
+      g_clear_object (&client_socket);
+      g_usleep (G_USEC_PER_SEC / 10);
+    }
+
+  /* The same thing happens for a D-Bus connection */
+  g_test_message ("Trying to connect to %s again...", f->socket_dbus_address);
+  second_confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_cmpstr (g_quark_to_string (f->error->domain), ==,
+                   g_quark_to_string (G_IO_ERROR));
+
+  if (f->error->code != G_IO_ERROR_CONNECTION_REFUSED &&
+      f->error->code != G_IO_ERROR_NOT_FOUND)
+    g_error ("Unexpected error code %d", f->error->code);
+
+  g_clear_error (&f->error);
+  g_assert_null (second_confined_conn);
+
+  /* The socket has been deleted */
+  g_assert_false (g_file_test (f->socket_path, G_FILE_TEST_EXISTS));
+
+  switch (config->stop_server)
+    {
+      case STOP_SERVER_FORCE:
+        g_test_message ("Checking that the confined app gets disconnected...");
+
+        while (!g_dbus_connection_is_closed (f->confined_conn))
+          g_main_context_iteration (NULL, TRUE);
+        break;
+
+      case STOP_SERVER_DISCONNECT_FIRST:
+      case STOP_SERVER_NEVER_CONNECTED:
+        /* Nothing to be done here, no confined app is connected */
+        break;
+
+      case STOP_SERVER_EXPLICITLY:
+      case STOP_SERVER_WITH_MANAGER:
+        g_test_message ("Checking that the confined app still works...");
+        tuple = g_dbus_connection_call_sync (f->confined_conn,
+                                             DBUS_SERVICE_DBUS,
+                                             DBUS_PATH_DBUS,
+                                             DBUS_INTERFACE_DBUS,
+                                             "GetNameOwner",
+                                             g_variant_new ("(s)",
+                                                            DBUS_SERVICE_DBUS),
+                                             G_VARIANT_TYPE ("(s)"),
+                                             G_DBUS_CALL_FLAGS_NONE, -1,
+                                             NULL, &f->error);
+        g_assert_no_error (f->error);
+        g_assert_nonnull (tuple);
+        g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(s)");
+        g_variant_get (tuple, "(&s)", &name_owner);
+        g_assert_cmpstr (name_owner, ==, DBUS_SERVICE_DBUS);
+        g_clear_pointer (&tuple, g_variant_unref);
+        break;
+
+      default:
+        g_assert_not_reached ();
+    }
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Assert that named arguments are validated: passing an unsupported
  * named argument causes an error.
  */
@@ -442,6 +751,32 @@ teardown (Fixture *f,
   g_clear_error (&f->error);
 }
 
+static const Config stop_server_explicitly =
+{
+  "valid-config-files/multi-user.conf",
+  STOP_SERVER_EXPLICITLY
+};
+static const Config stop_server_disconnect_first =
+{
+  "valid-config-files/multi-user.conf",
+  STOP_SERVER_DISCONNECT_FIRST
+};
+static const Config stop_server_never_connected =
+{
+  "valid-config-files/multi-user.conf",
+  STOP_SERVER_NEVER_CONNECTED
+};
+static const Config stop_server_force =
+{
+  "valid-config-files/multi-user.conf",
+  STOP_SERVER_FORCE
+};
+static const Config stop_server_with_manager =
+{
+  "valid-config-files/multi-user.conf",
+  STOP_SERVER_WITH_MANAGER
+};
+
 int
 main (int argc,
     char **argv)
@@ -477,6 +812,16 @@ main (int argc,
               setup, test_basic, teardown);
   g_test_add ("/containers/wrong-uid", Fixture, NULL,
               setup, test_wrong_uid, teardown);
+  g_test_add ("/containers/stop-server/explicitly", Fixture,
+              &stop_server_explicitly, setup, test_stop_server, teardown);
+  g_test_add ("/containers/stop-server/disconnect-first", Fixture,
+              &stop_server_disconnect_first, setup, test_stop_server, teardown);
+  g_test_add ("/containers/stop-server/never-connected", Fixture,
+              &stop_server_never_connected, setup, test_stop_server, teardown);
+  g_test_add ("/containers/stop-server/force", Fixture,
+              &stop_server_force, setup, test_stop_server, teardown);
+  g_test_add ("/containers/stop-server/with-manager", Fixture,
+              &stop_server_with_manager, setup, test_stop_server, teardown);
   g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
               setup, test_unsupported_parameter, teardown);
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
