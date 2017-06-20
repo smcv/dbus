@@ -213,6 +213,78 @@ test_monitor (Fixture *f,
   dbus_message_unref (m);
 }
 
+/*
+ * Assert that AddServer() can be called by the owner of the bus
+ * (TEST_USER_MESSAGEBUS) or by root, but cannot be called by other
+ * users for now.
+ */
+static void
+test_containers (Fixture *f,
+                 gconstpointer context)
+{
+#ifdef DBUS_ENABLE_CONTAINERS
+  const Config *config = context;
+#endif
+  DBusMessage *m;
+  DBusPendingCall *pc;
+
+  if (f->skip)
+    return;
+
+  /* We cheat and pass the wrong arguments, because passing an a{sv} with
+   * the libdbus API is really long-winded. The bus driver code checks
+   * for privileged or unprivileged access before it checks the arguments
+   * anyway. */
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1, "AddServer");
+
+  if (m == NULL)
+    g_error ("OOM");
+
+  if (!dbus_connection_send_with_reply (f->conn, m, &pc,
+                                        DBUS_TIMEOUT_USE_DEFAULT) ||
+      pc == NULL)
+    g_error ("OOM");
+
+  dbus_clear_message (&m);
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &m);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+                                          &m, NULL))
+    g_error ("OOM");
+
+  while (m == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  if (config->expect_success)
+    {
+      /* It would have succeeded if we'd passed the right arguments! */
+      g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+          DBUS_ERROR_INVALID_ARGS);
+      g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+    }
+  else
+    {
+      /* It fails, yielding an error message with one string argument */
+      g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+          DBUS_ERROR_ACCESS_DENIED);
+      g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+    }
+#else
+  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+      DBUS_ERROR_UNKNOWN_INTERFACE);
+  g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+#endif
+
+  dbus_clear_pending_call (&pc);
+  dbus_clear_message (&m);
+}
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -277,6 +349,15 @@ main (int argc,
       setup, test_monitor, teardown);
   g_test_add ("/uid-permissions/monitor/other", Fixture, &other_fail_config,
       setup, test_monitor, teardown);
+
+  /* AddServer has the same behaviour */
+  g_test_add ("/uid-permissions/containers/root", Fixture, &root_ok_config,
+      setup, test_containers, teardown);
+  g_test_add ("/uid-permissions/containers/messagebus", Fixture,
+      &messagebus_ok_config,
+      setup, test_containers, teardown);
+  g_test_add ("/uid-permissions/containers/other", Fixture, &other_fail_config,
+      setup, test_containers, teardown);
 
   return g_test_run ();
 }
