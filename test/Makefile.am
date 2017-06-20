@@ -181,6 +181,7 @@ installable_helpers += \
 	$(NULL)
 
 installable_tests += \
+	test-containers \
 	test-sd-activation \
 	$(NULL)
 
@@ -285,6 +286,12 @@ test_apparmor_activation_LDADD = \
     $(GLIB_LIBS) \
     $(NULL)
 endif
+
+test_containers_SOURCES = containers.c
+test_containers_LDADD = \
+    libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
 
 test_corrupt_SOURCES = corrupt.c
 test_corrupt_LDADD = \
