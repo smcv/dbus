@@ -25,11 +25,23 @@
 
 #include "bus.h"
 
+#include <dbus/dbus-macros.h>
+
+BusContainers        *bus_containers_new           (void);
+BusContainers        *bus_containers_ref           (BusContainers *self);
+void                  bus_containers_unref         (BusContainers *self);
+
 dbus_bool_t bus_containers_handle_add_server          (DBusConnection  *connection,
                                                        BusTransaction  *transaction,
                                                        DBusMessage     *message,
                                                        DBusError       *error);
 dbus_bool_t bus_containers_supported_arguments_getter (BusContext      *context,
                                                        DBusMessageIter *var_iter);
+
+static inline void
+bus_clear_containers (BusContainers **containers_p)
+{
+  _dbus_clear_pointer_impl (BusContainers, containers_p, bus_containers_unref);
+}
 
 #endif /* multiple-inclusion guard */

@@ -29,6 +29,7 @@
 
 #include "activation.h"
 #include "connection.h"
+#include "containers.h"
 #include "services.h"
 #include "utils.h"
 #include "policy.h"
@@ -69,6 +70,7 @@ struct BusContext
   BusMatchmaker *matchmaker;
   BusLimits limits;
   DBusRLimit *initial_fd_limit;
+  BusContainers *containers;
   unsigned int fork : 1;
   unsigned int syslog : 1;
   unsigned int keep_umask : 1;
@@ -887,6 +889,14 @@ bus_context_new (const DBusString *config_file,
       goto failed;
     }
 
+  context->containers = bus_containers_new ();
+
+  if (context->containers == NULL)
+    {
+      BUS_SET_OOM (error);
+      goto failed;
+    }
+
   /* check user before we fork */
   if (context->user != NULL)
     {
@@ -1172,6 +1182,7 @@ bus_context_unref (BusContext *context)
           context->matchmaker = NULL;
         }
 
+      bus_clear_containers (&context->containers);
       dbus_free (context->config_file);
       dbus_free (context->log_prefix);
       dbus_free (context->type);
@@ -1280,6 +1291,12 @@ BusPolicy *
 bus_context_get_policy (BusContext *context)
 {
   return context->policy;
+}
+
+BusContainers *
+bus_context_get_containers (BusContext *context)
+{
+  return context->containers;
 }
 
 BusClientPolicy*
