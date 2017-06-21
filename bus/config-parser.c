@@ -481,7 +481,10 @@ bus_config_parser_new (const DBusString      *basedir,
   else
     {
 
-      /* Make up some numbers! woot! */
+      /* Make up some numbers! woot!
+       * Please keep these hard-coded values in sync with the comments
+       * in bus/system.conf.in. */
+
       parser->limits.max_incoming_bytes = _DBUS_ONE_MEGABYTE * 127;
       parser->limits.max_outgoing_bytes = _DBUS_ONE_MEGABYTE * 127;
       parser->limits.max_message_size = _DBUS_ONE_MEGABYTE * 32;
@@ -514,12 +517,21 @@ bus_config_parser_new (const DBusString      *basedir,
       
       parser->limits.max_incomplete_connections = 64;
       parser->limits.max_connections_per_user = 256;
+      parser->limits.max_containers_per_user = 16;
       
       /* Note that max_completed_connections / max_connections_per_user
        * is the number of users that would have to work together to
-       * DOS all the other users.
+       * DOS all the other users. The same applies to containers.
        */
       parser->limits.max_completed_connections = 2048;
+      parser->limits.max_containers = 512;
+      /* Similarly max_connections_per_user / max_connections_per_container
+       * is the number of app-containers per user that would have to work
+       * together to DoS all the other processes of that user */
+      parser->limits.max_connections_per_container = 8;
+      /* Someone trying to do a denial of service attack can make us store
+       * this much data per app-container */
+      parser->limits.max_container_metadata_bytes = 4096;
       
       parser->limits.max_pending_activations = 512;
       parser->limits.max_services_per_connection = 512;
@@ -2176,6 +2188,30 @@ set_limit (BusConfigParser *parser,
       must_be_positive = TRUE;
       must_be_int = TRUE;
       parser->limits.max_replies_per_connection = value;
+    }
+  else if (strcmp (name, "max_containers") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_containers = value;
+    }
+  else if (strcmp (name, "max_containers_per_user") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_containers_per_user = value;
+    }
+  else if (strcmp (name, "max_container_metadata_bytes") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_container_metadata_bytes = value;
+    }
+  else if (strcmp (name, "max_connections_per_container") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_connections_per_container = value;
     }
   else
     {

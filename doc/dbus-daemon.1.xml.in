@@ -749,6 +749,14 @@ Available limit names are:</para>
                                      (number of calls-in-progress)
       "reply_timeout"              : milliseconds (thousandths)
                                      until a method call times out
+      "max_containers"             : max number of restricted servers for use
+                                     in app-containers, in total
+      "max_containers_per_user"    : max number of app-containers per Unix uid
+      "max_container_metadata_bytes": max number of bytes of metadata to store
+                                      for each app-container
+      "max_connections_per_container": max number of (authenticated or
+                                       unauthenticated) connections to each
+                                       app-container
 </literallayout> <!-- .fi -->
 
 

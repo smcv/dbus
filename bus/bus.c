@@ -1397,6 +1397,26 @@ bus_context_get_reply_timeout (BusContext *context)
   return context->limits.reply_timeout;
 }
 
+int bus_context_get_max_containers (BusContext *context)
+{
+  return context->limits.max_containers;
+}
+
+int bus_context_get_max_containers_per_user (BusContext *context)
+{
+  return context->limits.max_containers_per_user;
+}
+
+int bus_context_get_max_container_metadata_bytes (BusContext *context)
+{
+  return context->limits.max_container_metadata_bytes;
+}
+
+int bus_context_get_max_connections_per_container (BusContext *context)
+{
+  return context->limits.max_connections_per_container;
+}
+
 DBusRLimit *
 bus_context_get_initial_fd_limit (BusContext *context)
 {
