@@ -812,3 +812,41 @@ bus_containers_stop_listening (BusContainers *self)
 }
 
 #endif /* DBUS_ENABLE_CONTAINERS */
+
+void
+bus_containers_remove_connection (BusContainers *self,
+                                  DBusConnection *connection)
+{
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerCreatorData *creator_data;
+
+  dbus_connection_ref (connection);
+  creator_data = dbus_connection_get_data (connection,
+                                           container_creator_data_slot);
+
+  if (creator_data != NULL)
+    {
+      DBusList *iter;
+      DBusList *next;
+
+      for (iter = _dbus_list_get_first_link (&creator_data->instances);
+           iter != NULL;
+           iter = next)
+        {
+          BusContainerInstance *instance = iter->data;
+
+          /* Remember where we got to before we do something that might free
+           * iter and instance */
+          next = _dbus_list_get_next_link (&creator_data->instances, iter);
+
+          _dbus_assert (instance->creator == connection);
+
+          /* This will invalidate iter and instance if there are no open
+           * connections to this instance */
+          bus_container_instance_stop_listening (instance);
+        }
+    }
+
+  dbus_connection_unref (connection);
+#endif /* DBUS_ENABLE_CONTAINERS */
+}

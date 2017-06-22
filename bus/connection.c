@@ -23,6 +23,8 @@
 
 #include <config.h>
 #include "connection.h"
+
+#include "containers.h"
 #include "dispatch.h"
 #include "policy.h"
 #include "services.h"
@@ -305,6 +307,9 @@ bus_connection_disconnected (DBusConnection *connection)
       _dbus_list_remove_link (&d->connections->monitors, d->link_in_monitors);
       d->link_in_monitors = NULL;
     }
+
+  bus_containers_remove_connection (bus_context_get_containers (d->connections->context),
+                                    connection);
 
   if (d->link_in_connection_list != NULL)
     {
