@@ -31,6 +31,8 @@
 # error DBUS_ENABLE_CONTAINERS requires DBUS_UNIX
 #endif
 
+#include <sys/types.h>
+
 #include "dbus/dbus-hash.h"
 #include "dbus/dbus-message-internal.h"
 #include "dbus/dbus-sysdeps-unix.h"
@@ -52,6 +54,7 @@ typedef struct
   BusContext *context;
   BusContainers *containers;
   DBusServer *server;
+  unsigned long uid;
 } BusContainerInstance;
 
 /*
@@ -284,6 +287,22 @@ static const char * const auth_mechanisms[] =
   NULL
 };
 
+/* Statically assert that we can store a uid in a void *, losslessly.
+ *
+ * In practice this is always true on Unix. For now we don't support this
+ * feature on systems where it isn't. */
+_DBUS_STATIC_ASSERT (sizeof (uid_t) <= sizeof (uintptr_t));
+/* True by definition. */
+_DBUS_STATIC_ASSERT (sizeof (void *) == sizeof (uintptr_t));
+
+static dbus_bool_t
+allow_same_uid_only (DBusConnection *connection,
+                     unsigned long   uid,
+                     void           *data)
+{
+  return (uid == (uintptr_t) data);
+}
+
 static void
 new_connection_cb (DBusServer     *server,
                    DBusConnection *new_connection,
@@ -294,6 +313,23 @@ new_connection_cb (DBusServer     *server,
   /* If this fails it logs a warning, so we don't need to do that */
   if (!bus_context_add_incoming_connection (instance->context, new_connection))
     return;
+
+  /* We'd like to check the uid here, but we can't yet. Instead clear the
+   * BusContext's unix_user_function, which results in us getting the
+   * default behaviour: only the user that owns the bus can connect.
+   *
+   * TODO: For the system bus we might want a way to opt-in to allowing
+   * other uids, in which case we would refrain from overwriting the
+   * BusContext's unix_user_function; but that isn't part of the
+   * lowest-common-denominator implementation. */
+  dbus_connection_set_unix_user_function (new_connection,
+                                          allow_same_uid_only,
+                                          /* The static assertion above
+                                           * allow_same_uid_only ensures that
+                                           * this cast does not lose
+                                           * information */
+                                          (void *) (uintptr_t) instance->uid,
+                                          NULL);
 }
 
 static const char *
@@ -431,6 +467,13 @@ bus_containers_handle_add_server (DBusConnection *connection,
 
   if (instance == NULL)
     goto fail;
+
+  if (!dbus_connection_get_unix_user (connection, &instance->uid))
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Unable to determine user ID of caller");
+      goto fail;
+    }
 
   /* We already checked this in bus_driver_handle_message() */
   _dbus_assert (dbus_message_has_signature (message, "ssa{sv}a{sv}"));
