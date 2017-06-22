@@ -2522,6 +2522,10 @@ static const MessageHandler introspectable_message_handlers[] = {
 static const MessageHandler containers_message_handlers[] = {
   { "AddServer", "ssa{sv}a{sv}", "oays", bus_containers_handle_add_server,
     METHOD_FLAG_PRIVILEGED },
+  { "StopInstance", "o", "", bus_containers_handle_stop_instance,
+    METHOD_FLAG_PRIVILEGED },
+  { "StopListening", "o", "", bus_containers_handle_stop_listening,
+    METHOD_FLAG_PRIVILEGED },
   { NULL, NULL, NULL, NULL }
 };
 static const PropertyHandler containers_property_handlers[] = {

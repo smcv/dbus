@@ -38,6 +38,7 @@
 #include "dbus/dbus-sysdeps-unix.h"
 
 #include "connection.h"
+#include "driver.h"
 #include "utils.h"
 
 /*
@@ -784,6 +785,105 @@ bus_containers_supported_arguments_getter (BusContext *context,
                                            DBUS_TYPE_STRING_AS_STRING,
                                            &arr_iter) &&
          dbus_message_iter_close_container (var_iter, &arr_iter);
+}
+
+dbus_bool_t
+bus_containers_handle_stop_instance (DBusConnection *connection,
+                                     BusTransaction *transaction,
+                                     DBusMessage    *message,
+                                     DBusError      *error)
+{
+  BusContext *context;
+  BusContainers *containers;
+  BusContainerInstance *instance = NULL;
+  DBusList *iter;
+  const char *path;
+
+  if (!dbus_message_get_args (message, error,
+                              DBUS_TYPE_OBJECT_PATH, &path,
+                              DBUS_TYPE_INVALID))
+    goto failed;
+
+  context = bus_transaction_get_context (transaction);
+  containers = bus_context_get_containers (context);
+
+  if (containers->instances_by_path != NULL)
+    {
+      instance = _dbus_hash_table_lookup_string (containers->instances_by_path,
+                                                 path);
+    }
+
+  if (instance == NULL)
+    {
+      dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
+                      "There is no container with path '%s'", path);
+      goto failed;
+    }
+
+  bus_container_instance_ref (instance);
+  bus_container_instance_stop_listening (instance);
+
+  for (iter = _dbus_list_get_first_link (&instance->connections);
+       iter != NULL;
+       iter = _dbus_list_get_next_link (&instance->connections, iter))
+    dbus_connection_close (iter->data);
+
+  bus_container_instance_unref (instance);
+
+  if (!bus_driver_send_ack_reply (connection, transaction, message, error))
+    goto failed;
+
+  return TRUE;
+
+failed:
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+  return FALSE;
+}
+
+dbus_bool_t
+bus_containers_handle_stop_listening (DBusConnection *connection,
+                                      BusTransaction *transaction,
+                                      DBusMessage    *message,
+                                      DBusError      *error)
+{
+  BusContext *context;
+  BusContainers *containers;
+  BusContainerInstance *instance = NULL;
+  const char *path;
+
+  if (!dbus_message_get_args (message, error,
+                              DBUS_TYPE_OBJECT_PATH, &path,
+                              DBUS_TYPE_INVALID))
+    goto failed;
+
+  context = bus_transaction_get_context (transaction);
+  containers = bus_context_get_containers (context);
+
+  if (containers->instances_by_path != NULL)
+    {
+      instance = _dbus_hash_table_lookup_string (containers->instances_by_path,
+                                                 path);
+    }
+
+  if (instance == NULL)
+    {
+      dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
+                      "There is no container with path '%s'", path);
+      goto failed;
+    }
+
+  bus_container_instance_ref (instance);
+  bus_container_instance_stop_listening (instance);
+  bus_container_instance_unref (instance);
+
+  if (!bus_driver_send_ack_reply (connection, transaction, message, error))
+    goto failed;
+
+  return TRUE;
+
+failed:
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+  return FALSE;
 }
 
 void

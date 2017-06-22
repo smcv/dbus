@@ -36,6 +36,14 @@ dbus_bool_t bus_containers_handle_add_server          (DBusConnection  *connecti
                                                        BusTransaction  *transaction,
                                                        DBusMessage     *message,
                                                        DBusError       *error);
+dbus_bool_t bus_containers_handle_stop_instance       (DBusConnection  *connection,
+                                                       BusTransaction  *transaction,
+                                                       DBusMessage     *message,
+                                                       DBusError       *error);
+dbus_bool_t bus_containers_handle_stop_listening      (DBusConnection  *connection,
+                                                       BusTransaction  *transaction,
+                                                       DBusMessage     *message,
+                                                       DBusError       *error);
 dbus_bool_t bus_containers_supported_arguments_getter (BusContext      *context,
                                                        DBusMessageIter *var_iter);
 
