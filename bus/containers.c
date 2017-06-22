@@ -649,6 +649,8 @@ bus_containers_handle_add_server (DBusConnection *connection,
   DBusAddressEntry **entries = NULL;
   int n_entries;
   DBusMessage *reply = NULL;
+  int metadata_size;
+  int limit;
 
   context = bus_transaction_get_context (transaction);
   containers = bus_context_get_containers (context);
@@ -728,6 +730,34 @@ bus_containers_handle_add_server (DBusConnection *connection,
   instance->metadata = _dbus_variant_read (&iter);
   _dbus_assert (strcmp (_dbus_variant_get_signature (instance->metadata),
                         "a{sv}") == 0);
+
+  /* For simplicity we don't count the size of the BusContainerInstance
+   * itself, the object path, lengths, the non-payload parts of the DBusString,
+   * NUL terminators and so on. That overhead is O(1) and relatively small.
+   * This cannot overflow because all parts came from a message, and messages
+   * are constrained to be orders of magnitude smaller than the maximum
+   * int value. */
+  metadata_size = _dbus_variant_get_length (instance->metadata) +
+                  (int) strlen (type) +
+                  (int) strlen (name);
+  limit = bus_context_get_max_container_metadata_bytes (context);
+
+  if (metadata_size > limit)
+    {
+      DBusError local_error = DBUS_ERROR_INIT;
+
+      dbus_set_error (&local_error, DBUS_ERROR_LIMITS_EXCEEDED,
+                      "Connection \"%s\" (%s) is not allowed to set "
+                      "%d bytes of container metadata "
+                      "(max_container_metadata_bytes=%d)",
+                      bus_connection_get_name (connection),
+                      bus_connection_get_loginfo (connection),
+                      metadata_size, limit);
+      bus_context_log_literal (context, DBUS_SYSTEM_LOG_WARNING,
+                               local_error.message);
+      dbus_move_error (&local_error, error);
+      goto fail;
+    }
 
   /* Argument 3: Named parameters */
   if (!dbus_message_iter_next (&iter))
