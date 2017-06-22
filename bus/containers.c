@@ -798,6 +798,24 @@ bus_containers_handle_add_server (DBusConnection *connection,
         goto oom;
     }
 
+  limit = bus_context_get_max_containers (context);
+
+  if (_dbus_hash_table_get_n_entries (containers->instances_by_path) >= limit)
+    {
+      DBusError local_error = DBUS_ERROR_INIT;
+
+      dbus_set_error (&local_error, DBUS_ERROR_LIMITS_EXCEEDED,
+                      "Connection \"%s\" (%s) is not allowed to create more "
+                      "container servers (max_containers=%d)",
+                      bus_connection_get_name (connection),
+                      bus_connection_get_loginfo (connection),
+                      limit);
+      bus_context_log_literal (context, DBUS_SYSTEM_LOG_WARNING,
+                               local_error.message);
+      dbus_move_error (&local_error, error);
+      goto fail;
+    }
+
   if (!_dbus_hash_table_insert_string (containers->instances_by_path,
                                        instance->path, instance))
     goto oom;
