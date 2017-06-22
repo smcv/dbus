@@ -289,7 +289,11 @@ new_connection_cb (DBusServer     *server,
                    DBusConnection *new_connection,
                    void           *data)
 {
-  /* TODO: handle new connection */
+  BusContainerInstance *instance = data;
+
+  /* If this fails it logs a warning, so we don't need to do that */
+  if (!bus_context_add_incoming_connection (instance->context, new_connection))
+    return;
 }
 
 static const char *
