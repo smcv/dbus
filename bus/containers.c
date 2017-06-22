@@ -474,6 +474,19 @@ new_connection_cb (DBusServer     *server,
                    void           *data)
 {
   BusContainerInstance *instance = data;
+  int limit = bus_context_get_max_connections_per_container (instance->context);
+
+  /* This is O(n), but we assume n is small in practice. */
+  if (_dbus_list_get_length (&instance->connections) >= limit)
+    {
+      /* We can't send this error to the new connection, so just log it */
+      bus_context_log (instance->context, DBUS_SYSTEM_LOG_WARNING,
+                       "Closing connection to container server "
+                       "%s (%s \"%s\") because it would exceed resource limit "
+                       "(max_connections_per_container=%d)",
+                       instance->path, instance->type, instance->name, limit);
+      return;
+    }
 
   if (!dbus_connection_set_data (new_connection, contained_data_slot,
                                  bus_container_instance_ref (instance),
