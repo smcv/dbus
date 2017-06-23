@@ -61,6 +61,7 @@ typedef struct {
     GDBusConnection *confined_conn;
 
     GDBusConnection *observer_conn;
+    GDBusProxy *observer_proxy;
     GHashTable *containers_removed;
     guint removed_sub;
 } Fixture;
@@ -596,6 +597,7 @@ test_stop_server (Fixture *f,
   GSocketAddress *socket_address;
   GVariant *tuple;
   GVariant *parameters;
+  gchar *error_name;
   const gchar *confined_unique_name;
   const gchar *manager_unique_name;
   const gchar *name_owner;
@@ -607,6 +609,14 @@ test_stop_server (Fixture *f,
 
   if (f->skip)
     return;
+
+  f->observer_proxy = g_dbus_proxy_new_sync (f->observer_conn,
+                                             G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                             NULL, DBUS_SERVICE_DBUS,
+                                             DBUS_PATH_DBUS,
+                                             DBUS_INTERFACE_CONTAINERS1, NULL,
+                                             &f->error);
+  g_assert_no_error (f->error);
 
   parameters = g_variant_new ("(ssa{sv}a{sv})",
                               "com.example.NotFlatpak",
@@ -864,6 +874,16 @@ test_stop_server (Fixture *f,
         g_assert_cmpstr (name_owner, ==, DBUS_SERVICE_DBUS);
         g_clear_pointer (&tuple, g_variant_unref);
 
+        /* The container instance will not disappear from the bus
+         * until the confined connection goes away */
+        tuple = g_dbus_proxy_call_sync (f->observer_proxy, "GetInstanceInfo",
+                                        g_variant_new ("(o)", f->instance_path),
+                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                        &f->error);
+        g_assert_no_error (f->error);
+        g_assert_nonnull (tuple);
+        g_clear_pointer (&tuple, g_variant_unref);
+
         /* Now disconnect the last confined connection, which will make the
          * container instance go away */
         g_test_message ("Closing confined connection...");
@@ -880,6 +900,17 @@ test_stop_server (Fixture *f,
   g_test_message ("Waiting for InstanceRemoved...");
   while (!g_hash_table_contains (f->containers_removed, f->instance_path))
     g_main_context_iteration (NULL, TRUE);
+
+  tuple = g_dbus_proxy_call_sync (f->observer_proxy, "GetInstanceInfo",
+                                  g_variant_new ("(o)", f->instance_path),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                  &f->error);
+  g_assert_nonnull (f->error);
+  error_name = g_dbus_error_get_remote_error (f->error);
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_NOT_CONTAINER);
+  g_free (error_name);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
 
 #else /* !HAVE_CONTAINERS_TEST */
   g_test_skip ("Containers or gio-unix-2.0 not supported");
