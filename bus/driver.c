@@ -2571,11 +2571,11 @@ static const MessageHandler introspectable_message_handlers[] = {
 #ifdef DBUS_ENABLE_CONTAINERS
 static const MessageHandler containers_message_handlers[] = {
   { "AddServer", "ssa{sv}a{sv}", "oays", bus_containers_handle_add_server,
-    METHOD_FLAG_PRIVILEGED },
+    METHOD_FLAG_NO_CONTAINERS },
   { "StopInstance", "o", "", bus_containers_handle_stop_instance,
-    METHOD_FLAG_PRIVILEGED },
+    METHOD_FLAG_NO_CONTAINERS },
   { "StopListening", "o", "", bus_containers_handle_stop_listening,
-    METHOD_FLAG_PRIVILEGED },
+    METHOD_FLAG_NO_CONTAINERS },
   { "GetConnectionInstance", "s", "ossa{sv}",
     bus_containers_handle_get_connection_instance,
     METHOD_FLAG_NONE },
