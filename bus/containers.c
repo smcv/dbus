@@ -38,6 +38,7 @@
 #include "dbus/dbus-sysdeps-unix.h"
 
 #include "connection.h"
+#include "dispatch.h"
 #include "driver.h"
 #include "utils.h"
 
@@ -60,6 +61,7 @@ typedef struct
    * removed from the bus */
   DBusList *connections;
   unsigned long uid;
+  unsigned announced:1;
 } BusContainerInstance;
 
 /* Data attached to a DBusConnection that has created container instances. */
@@ -209,6 +211,61 @@ bus_container_instance_ref (BusContainerInstance *self)
   return self;
 }
 
+static dbus_bool_t
+bus_container_instance_emit_removed (BusContainerInstance *self)
+{
+  BusTransaction *transaction = NULL;
+  DBusMessage *message = NULL;
+  DBusError error = DBUS_ERROR_INIT;
+
+  transaction = bus_transaction_new (self->context);
+
+  if (transaction == NULL)
+    goto oom;
+
+  message = dbus_message_new_signal (DBUS_PATH_DBUS,
+                                     DBUS_INTERFACE_CONTAINERS1,
+                                     "InstanceRemoved");
+
+  if (message == NULL ||
+      !dbus_message_set_sender (message, DBUS_SERVICE_DBUS) ||
+      !dbus_message_append_args (message,
+                                 DBUS_TYPE_OBJECT_PATH, &self->path,
+                                 DBUS_TYPE_INVALID) ||
+      !bus_transaction_capture (transaction, NULL, NULL, message))
+    goto oom;
+
+  if (!bus_dispatch_matches (transaction, NULL, NULL, message, &error))
+    {
+      if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
+        goto oom;
+
+      /* This can't actually happen, because all of the error cases in
+       * bus_dispatch_matches() are only if there is an addressed recipient
+       * (a unicast message), which there is not in this case. But if it
+       * somehow does happen, we don't want to stay in the OOM-retry loop,
+       * because waiting for more memory will not help; so continue to
+       * execute the transaction anyway. */
+      _dbus_warn ("Failed to send InstanceRemoved for a reason "
+                  "other than OOM: %s: %s", error.name, error.message);
+      dbus_error_free (&error);
+    }
+
+  bus_transaction_execute_and_free (transaction);
+  dbus_message_unref (message);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (&error);
+  return TRUE;
+
+oom:
+  dbus_error_free (&error);
+  dbus_clear_message (&message);
+
+  if (transaction != NULL)
+    bus_transaction_cancel_and_free (transaction);
+
+  return FALSE;
+}
+
 static void
 bus_container_instance_unref (BusContainerInstance *self)
 {
@@ -217,6 +274,21 @@ bus_container_instance_unref (BusContainerInstance *self)
   if (--self->refcount == 0)
     {
       BusContainerCreatorData *creator_data;
+
+      /* If we announced the container instance in a reply from
+       * AddServer() (which is also the time at which it becomes
+       * available for the querying methods), then we have to emit
+       * InstanceRemoved for it.
+       *
+       * Similar to bus/connection.c dropping well-known name ownership,
+       * this isn't really a situation where we can "fail", because
+       * this last-unref is likely to be happening as a result of a
+       * connection disconnecting; so we use a retry loop on OOM. */
+      for (; self->announced; _dbus_wait_for_memory ())
+        {
+          if (bus_container_instance_emit_removed (self))
+            self->announced = FALSE;
+        }
 
       /* As long as the server is listening, the BusContainerInstance can't
        * be freed, because the DBusServer holds a reference to the
@@ -754,6 +826,7 @@ bus_containers_handle_add_server (DBusConnection *connection,
   if (! bus_transaction_send_from_driver (transaction, connection, reply))
     goto oom;
 
+  instance->announced = TRUE;
   dbus_message_unref (reply);
   bus_container_instance_unref (instance);
   dbus_address_entries_free (entries);

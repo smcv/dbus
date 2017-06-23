@@ -2639,7 +2639,10 @@ static InterfaceHandler interface_handlers[] = {
     INTERFACE_FLAG_NONE },
 #endif
 #ifdef DBUS_ENABLE_CONTAINERS
-  { DBUS_INTERFACE_CONTAINERS1, containers_message_handlers, NULL,
+  { DBUS_INTERFACE_CONTAINERS1, containers_message_handlers,
+    "    <signal name=\"InstanceRemoved\">\n"
+    "      <arg type=\"o\" name=\"path\"/>\n"
+    "    </signal>\n",
     INTERFACE_FLAG_NONE, containers_property_handlers },
 #endif
   { DBUS_INTERFACE_PEER, peer_message_handlers, NULL,
