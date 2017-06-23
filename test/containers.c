@@ -1137,6 +1137,255 @@ test_invalid_nesting (Fixture *f,
 #endif /* !HAVE_CONTAINERS_TEST */
 }
 
+/*
+ * Assert that we can have up to 3 containers, but no more than that,
+ * either because max-containers.conf imposes max_containers=3
+ * or because limit-containers.conf imposes max_containers_per_user=3
+ * (and we only have one uid).
+ */
+static void
+test_max_containers (Fixture *f,
+                     gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GVariant *parameters;
+  GVariant *tuple;
+  /* Length must match max_containers in max-containers.conf, and also
+   * max_containers_per_user in limit-containers.conf */
+  gchar *placeholders[3] = { NULL };
+  guint i;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  /* We will reuse this variant several times, so don't use floating refs */
+  g_variant_ref_sink (parameters);
+
+  /* We can go up to the limit without exceeding it */
+  for (i = 0; i < G_N_ELEMENTS (placeholders); i++)
+    {
+      tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer",
+                                      parameters, G_DBUS_CALL_FLAGS_NONE, -1,
+                                      NULL, &f->error);
+      g_assert_no_error (f->error);
+      g_assert_nonnull (tuple);
+      g_variant_get (tuple, "(o^ays)", &placeholders[i], NULL, NULL);
+      g_variant_unref (tuple);
+      g_test_message ("Placeholder server at %s", placeholders[i]);
+    }
+
+  /* We cannot exceed the limit */
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer",
+                                  parameters, G_DBUS_CALL_FLAGS_NONE, -1,
+                                  NULL, &f->error);
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_LIMITS_EXCEEDED);
+  g_clear_error (&f->error);
+  g_assert_null (tuple);
+
+  /* Stop one of the placeholders */
+  tuple = g_dbus_proxy_call_sync (f->proxy, "StopListening",
+                                  g_variant_new ("(o)", placeholders[1]),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                  &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_variant_unref (tuple);
+
+  /* We can have another container server now that we are back below the
+   * limit */
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer",
+                                  parameters, G_DBUS_CALL_FLAGS_NONE, -1,
+                                  NULL, &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_variant_unref (tuple);
+
+  g_variant_unref (parameters);
+
+  for (i = 0; i < G_N_ELEMENTS (placeholders); i++)
+    g_free (placeholders[i]);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+#ifdef HAVE_CONTAINERS_TEST
+static void
+assert_connection_closed (GError *error)
+{
+  /* "before 2.44 some "connection closed" errors returned
+   * G_IO_ERROR_BROKEN_PIPE, but others returned G_IO_ERROR_FAILED"
+   * —GIO documentation */
+  if (error->code == G_IO_ERROR_BROKEN_PIPE)
+    {
+      g_assert_error (error, G_IO_ERROR, G_IO_ERROR_BROKEN_PIPE);
+    }
+  else
+    {
+      g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
+      g_test_message ("Old GLib: %s", error->message);
+      /* This is wrong and bad, but it's the only way to detect this, and
+       * the older GLib versions that raised FAILED are no longer a moving
+       * target */
+      g_assert_true (strstr (error->message, g_strerror (ECONNRESET)) != NULL);
+    }
+}
+#endif
+
+/*
+ * Test that if we have multiple app-containers,
+ * max_connections_per_container applies to each one individually.
+ */
+static void
+test_max_connections_per_container (Fixture *f,
+                                    gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  /* Length is arbitrary */
+  gchar *socket_paths[2] = { NULL };
+  gchar *dbus_addresses[G_N_ELEMENTS (socket_paths)] = { NULL };
+  GSocketAddress *socket_addresses[G_N_ELEMENTS (socket_paths)] = { NULL };
+  /* Length must be length of socket_paths * max_connections_per_container in
+   * limit-containers.conf */
+  GSocket *placeholders[G_N_ELEMENTS (socket_paths) * 3] = { NULL };
+  GVariant *parameters;
+  GVariant *tuple;
+  guint i;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  /* We will reuse this variant several times, so don't use floating refs */
+  g_variant_ref_sink (parameters);
+
+  for (i = 0; i < G_N_ELEMENTS (socket_paths); i++)
+    {
+      tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer",
+                                      parameters, G_DBUS_CALL_FLAGS_NONE, -1,
+                                      NULL, &f->error);
+      g_assert_no_error (f->error);
+      g_assert_nonnull (tuple);
+      g_variant_get (tuple, "(o^ays)", NULL, &socket_paths[i],
+                     &dbus_addresses[i]);
+      g_variant_unref (tuple);
+      socket_addresses[i] = g_unix_socket_address_new (socket_paths[i]);
+      g_test_message ("Server #%u at %s", i, socket_paths[i]);
+    }
+
+  for (i = 0; i < G_N_ELEMENTS (placeholders); i++)
+    {
+      /* We enforce the resource limit for any connection to the socket,
+       * not just D-Bus connections that have done the handshake */
+      placeholders[i] = g_socket_new (G_SOCKET_FAMILY_UNIX,
+                                      G_SOCKET_TYPE_STREAM,
+                                      G_SOCKET_PROTOCOL_DEFAULT, &f->error);
+      g_assert_no_error (f->error);
+
+      g_socket_connect (placeholders[i],
+                        socket_addresses[i % G_N_ELEMENTS (socket_paths)],
+                        NULL, &f->error);
+      g_assert_no_error (f->error);
+      g_test_message ("Placeholder connection #%u to %s", i,
+                      socket_paths[i % G_N_ELEMENTS (socket_paths)]);
+    }
+
+  /* An extra connection to either of the sockets fails: they are both at
+   * capacity now */
+  for (i = 0; i < G_N_ELEMENTS (socket_paths); i++)
+    {
+      f->confined_conn = g_dbus_connection_new_for_address_sync (
+          dbus_addresses[i],
+          (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+           G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+          NULL, NULL, &f->error);
+      assert_connection_closed (f->error);
+
+      g_clear_error (&f->error);
+      g_assert_null (f->confined_conn);
+    }
+
+  /* Free up one slot (this happens to be connected to socket_paths[0]) */
+  g_socket_close (placeholders[2], &f->error);
+  g_assert_no_error (f->error);
+
+  /* Now we can connect, but only once. Use a retry loop since the dbus-daemon
+   * won't necessarily notice our socket closing synchronously. */
+  while (f->confined_conn == NULL)
+    {
+      g_test_message ("Trying to use the slot we just freed up...");
+      f->confined_conn = g_dbus_connection_new_for_address_sync (
+          dbus_addresses[0],
+          (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+           G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+          NULL, NULL, &f->error);
+
+      if (f->confined_conn == NULL)
+        {
+          assert_connection_closed (f->error);
+          g_clear_error (&f->error);
+          g_assert_nonnull (f->confined_conn);
+        }
+      else
+        {
+          g_assert_no_error (f->error);
+        }
+    }
+
+  /* An extra connection to either of the sockets fails: they are both at
+   * capacity again */
+  for (i = 0; i < G_N_ELEMENTS (socket_paths); i++)
+    {
+      GDBusConnection *another = g_dbus_connection_new_for_address_sync (
+          dbus_addresses[i],
+          (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+           G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+          NULL, NULL, &f->error);
+
+      assert_connection_closed (f->error);
+      g_clear_error (&f->error);
+      g_assert_null (another);
+    }
+
+  g_variant_unref (parameters);
+
+  for (i = 0; i < G_N_ELEMENTS (socket_paths); i++)
+    {
+      g_free (socket_paths[i]);
+      g_free (dbus_addresses[i]);
+      g_clear_object (&socket_addresses[i]);
+    }
+
+#undef LIMIT
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -1202,6 +1451,59 @@ teardown (Fixture *f,
   g_clear_error (&f->error);
 }
 
+/*
+ * Test what happens when we exceed max_container_metadata_bytes.
+ * test_metadata() exercises the non-excessive case with the same
+ * configuration.
+ */
+static void
+test_max_container_metadata_bytes (Fixture *f,
+                                   gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  /* Must be >= max_container_metadata_bytes in limit-containers.conf, so that
+   * when the serialization overhead, app-container type and app name are
+   * added, it is too much for the limit */
+  guchar waste_of_space[4096] = { 0 };
+  GVariant *tuple;
+  GVariant *parameters;
+  GVariantDict dict;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_variant_dict_init (&dict, NULL);
+  g_variant_dict_insert (&dict, "waste of space", "@ay",
+                         g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE,
+                                                    waste_of_space,
+                                                    sizeof (waste_of_space),
+                                                    1));
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ss@a{sv}a{sv})",
+                              "com.wasteheadquarters",
+                              "Packt Like Sardines in a Crushd Tin Box",
+                              g_variant_dict_end (&dict),
+                              NULL); /* no named arguments */
+
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer", parameters,
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_LIMITS_EXCEEDED);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
 static const Config stop_server_explicitly =
 {
   "valid-config-files/multi-user.conf",
@@ -1226,6 +1528,16 @@ static const Config stop_server_with_manager =
 {
   "valid-config-files/multi-user.conf",
   STOP_SERVER_WITH_MANAGER
+};
+static const Config limit_containers =
+{
+  "valid-config-files/limit-containers.conf",
+  0 /* not relevant for this test */
+};
+static const Config max_containers =
+{
+  "valid-config-files/max-containers.conf",
+  0 /* not relevant for this test */
 };
 
 int
@@ -1273,7 +1585,7 @@ main (int argc,
               &stop_server_force, setup, test_stop_server, teardown);
   g_test_add ("/containers/stop-server/with-manager", Fixture,
               &stop_server_with_manager, setup, test_stop_server, teardown);
-  g_test_add ("/containers/metadata", Fixture, NULL,
+  g_test_add ("/containers/metadata", Fixture, &limit_containers,
               setup, test_metadata, teardown);
   g_test_add ("/containers/invalid-metadata-getters", Fixture, NULL,
               setup, test_invalid_metadata_getters, teardown);
@@ -1283,6 +1595,16 @@ main (int argc,
               setup, test_invalid_type_name, teardown);
   g_test_add ("/containers/invalid-nesting", Fixture, NULL,
               setup, test_invalid_nesting, teardown);
+  g_test_add ("/containers/max-containers", Fixture, &max_containers,
+              setup, test_max_containers, teardown);
+  g_test_add ("/containers/max-containers-per-user", Fixture, &limit_containers,
+              setup, test_max_containers, teardown);
+  g_test_add ("/containers/max-connections-per-container", Fixture,
+              &limit_containers,
+              setup, test_max_connections_per_container, teardown);
+  g_test_add ("/containers/max-container-metadata-bytes", Fixture,
+              &limit_containers,
+              setup, test_max_container_metadata_bytes, teardown);
 
   ret = g_test_run ();
 
