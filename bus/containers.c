@@ -798,6 +798,7 @@ bus_containers_handle_stop_instance (DBusConnection *connection,
   BusContainerInstance *instance = NULL;
   DBusList *iter;
   const char *path;
+  unsigned long uid;
 
   if (!dbus_message_get_args (message, error,
                               DBUS_TYPE_OBJECT_PATH, &path,
@@ -817,6 +818,21 @@ bus_containers_handle_stop_instance (DBusConnection *connection,
     {
       dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
                       "There is no container with path '%s'", path);
+      goto failed;
+    }
+
+  if (!dbus_connection_get_unix_user (connection, &uid))
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Unable to determine user ID of caller");
+      goto failed;
+    }
+
+  if (uid != instance->uid)
+    {
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "User %lu cannot stop a container server started by "
+                      "user %lu", uid, instance->uid);
       goto failed;
     }
 
@@ -850,6 +866,7 @@ bus_containers_handle_stop_listening (DBusConnection *connection,
   BusContainers *containers;
   BusContainerInstance *instance = NULL;
   const char *path;
+  unsigned long uid;
 
   if (!dbus_message_get_args (message, error,
                               DBUS_TYPE_OBJECT_PATH, &path,
@@ -869,6 +886,21 @@ bus_containers_handle_stop_listening (DBusConnection *connection,
     {
       dbus_set_error (error, DBUS_ERROR_NOT_CONTAINER,
                       "There is no container with path '%s'", path);
+      goto failed;
+    }
+
+  if (!dbus_connection_get_unix_user (connection, &uid))
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Unable to determine user ID of caller");
+      goto failed;
+    }
+
+  if (uid != instance->uid)
+    {
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "User %lu cannot stop a container server started by "
+                      "user %lu", uid, instance->uid);
       goto failed;
     }
 
