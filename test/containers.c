@@ -59,6 +59,10 @@ typedef struct {
     gchar *socket_dbus_address;
     GDBusConnection *unconfined_conn;
     GDBusConnection *confined_conn;
+
+    GDBusConnection *observer_conn;
+    GHashTable *containers_removed;
+    guint removed_sub;
 } Fixture;
 
 typedef struct
@@ -97,6 +101,28 @@ name_gone_set_boolean_cb (GDBusConnection *conn,
 #endif
 
 static void
+instance_removed_cb (GDBusConnection *observer,
+                     const gchar *sender,
+                     const gchar *path,
+                     const gchar *iface,
+                     const gchar *member,
+                     GVariant *parameters,
+                     gpointer user_data)
+{
+  Fixture *f = user_data;
+  const gchar *container;
+
+  g_assert_cmpstr (sender, ==, DBUS_SERVICE_DBUS);
+  g_assert_cmpstr (path, ==, DBUS_PATH_DBUS);
+  g_assert_cmpstr (iface, ==, DBUS_INTERFACE_CONTAINERS1);
+  g_assert_cmpstr (member, ==, "InstanceRemoved");
+  g_assert_cmpstr (g_variant_get_type_string (parameters), ==, "(o)");
+  g_variant_get (parameters, "(&o)", &container);
+  g_assert (!g_hash_table_contains (f->containers_removed, container));
+  g_hash_table_add (f->containers_removed, g_strdup (container));
+}
+
+static void
 setup (Fixture *f,
        gconstpointer context)
 {
@@ -119,6 +145,22 @@ setup (Fixture *f,
        G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
       NULL, NULL, &f->error);
   g_assert_no_error (f->error);
+
+  f->observer_conn = g_dbus_connection_new_for_address_sync (f->bus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+  f->containers_removed = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                 g_free, NULL);
+  f->removed_sub = g_dbus_connection_signal_subscribe (f->observer_conn,
+                                                       DBUS_SERVICE_DBUS,
+                                                       DBUS_INTERFACE_CONTAINERS1,
+                                                       "InstanceRemoved",
+                                                       DBUS_PATH_DBUS, NULL,
+                                                       G_DBUS_SIGNAL_FLAGS_NONE,
+                                                       instance_removed_cb,
+                                                       f, NULL);
 }
 
 /*
@@ -413,7 +455,7 @@ test_stop_server (Fixture *f,
           gone = FALSE;
           confined_unique_name = g_dbus_connection_get_unique_name (
               f->confined_conn);
-          name_watch = g_bus_watch_name_on_connection (f->unconfined_conn,
+          name_watch = g_bus_watch_name_on_connection (f->observer_conn,
                                                        confined_unique_name,
                                                        G_BUS_NAME_WATCHER_FLAGS_NONE,
                                                        NULL,
@@ -476,6 +518,9 @@ test_stop_server (Fixture *f,
       g_clear_error (&f->error);
     }
 
+  g_assert_false (g_hash_table_contains (f->containers_removed,
+                                         f->instance_path));
+
   switch (config->stop_server)
     {
       case STOP_SERVER_WITH_MANAGER:
@@ -501,8 +546,6 @@ test_stop_server (Fixture *f,
         break;
 
       case STOP_SERVER_EXPLICITLY:
-      case STOP_SERVER_DISCONNECT_FIRST:
-      case STOP_SERVER_NEVER_CONNECTED:
         g_test_message ("Stopping server (but not confined connection)...");
         tuple = g_dbus_proxy_call_sync (f->proxy, "StopListening",
                                         g_variant_new ("(o)", f->instance_path),
@@ -510,6 +553,35 @@ test_stop_server (Fixture *f,
                                         &f->error);
         g_assert_no_error (f->error);
         g_variant_unref (tuple);
+
+        /* The container instance remains open, because the connection has
+         * not gone away yet. Do another method call: if we were going to
+         * get the signal, it would arrive before the reply to this second
+         * method call. Any method will do here, even one that doesn't
+         * exist. */
+        g_test_message ("Checking we do not get InstanceRemoved...");
+        tuple = g_dbus_proxy_call_sync (f->proxy, "NoSuchMethod", NULL,
+                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                        &f->error);
+        g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD);
+        g_assert_null (tuple);
+        g_clear_error (&f->error);
+        break;
+
+      case STOP_SERVER_DISCONNECT_FIRST:
+      case STOP_SERVER_NEVER_CONNECTED:
+        g_test_message ("Stopping server (with no confined connections)...");
+        tuple = g_dbus_proxy_call_sync (f->proxy, "StopListening",
+                                        g_variant_new ("(o)", f->instance_path),
+                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                        &f->error);
+        g_assert_no_error (f->error);
+        g_variant_unref (tuple);
+
+        g_test_message ("Waiting for InstanceRemoved...");
+        while (!g_hash_table_contains (f->containers_removed, f->instance_path))
+          g_main_context_iteration (NULL, TRUE);
+
         break;
 
       case STOP_SERVER_FORCE:
@@ -520,6 +592,11 @@ test_stop_server (Fixture *f,
                                         &f->error);
         g_assert_no_error (f->error);
         g_variant_unref (tuple);
+
+        g_test_message ("Waiting for InstanceRemoved...");
+        while (!g_hash_table_contains (f->containers_removed, f->instance_path))
+          g_main_context_iteration (NULL, TRUE);
+
         break;
 
       default:
@@ -607,11 +684,23 @@ test_stop_server (Fixture *f,
         g_variant_get (tuple, "(&s)", &name_owner);
         g_assert_cmpstr (name_owner, ==, DBUS_SERVICE_DBUS);
         g_clear_pointer (&tuple, g_variant_unref);
+
+        /* Now disconnect the last confined connection, which will make the
+         * container instance go away */
+        g_test_message ("Closing confined connection...");
+        g_dbus_connection_close_sync (f->confined_conn, NULL, &f->error);
+        g_assert_no_error (f->error);
         break;
 
       default:
         g_assert_not_reached ();
     }
+
+  /* Whatever happened above, by now it has gone away */
+
+  g_test_message ("Waiting for InstanceRemoved...");
+  while (!g_hash_table_contains (f->containers_removed, f->instance_path))
+    g_main_context_iteration (NULL, TRUE);
 
 #else /* !HAVE_CONTAINERS_TEST */
   g_test_skip ("Containers or gio-unix-2.0 not supported");
@@ -708,6 +797,23 @@ teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
   g_clear_object (&f->proxy);
+
+  if (f->observer_conn != NULL)
+    {
+      GError *error = NULL;
+
+      g_dbus_connection_signal_unsubscribe (f->observer_conn,
+                                            f->removed_sub);
+      g_dbus_connection_close_sync (f->observer_conn, NULL, &error);
+
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+        g_clear_error (&error);
+      else
+        g_assert_no_error (error);
+    }
+
+  g_clear_pointer (&f->containers_removed, g_hash_table_unref);
+  g_clear_object (&f->observer_conn);
 
   if (f->unconfined_conn != NULL)
     {
