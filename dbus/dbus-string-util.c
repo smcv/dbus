@@ -228,7 +228,7 @@ _DBUS_STRING_DEFINE_STATIC (test_static_string, "hello");
 dbus_bool_t
 _dbus_string_test (void)
 {
-  DBusString str;
+  DBusString str = _DBUS_STRING_INIT_INVALID;
   DBusString other;
   int i, a, end;
   long v;
@@ -244,6 +244,11 @@ _dbus_string_test (void)
   _dbus_assert (real_test_static_string->locked);
   _dbus_assert (real_test_static_string->valid);
   _dbus_assert (real_test_static_string->align_offset == 0);
+
+  /* Test that _DBUS_STRING_INIT_INVALID has the desired effect */
+  _dbus_string_free (&str);
+  _dbus_string_free (&str);
+  _dbus_string_free (&str);
 
   /* Test shortening and setting length */
   i = 0;
@@ -269,6 +274,9 @@ _dbus_string_test (void)
           --j;
         }
       
+      _dbus_string_free (&str);
+      /* Test that a cleared string is effectively _DBUS_STRING_INIT_INVALID */
+      _dbus_string_free (&str);
       _dbus_string_free (&str);
 
       ++i;

@@ -54,6 +54,22 @@ struct DBusString
   unsigned int dummy_bits : 3; /**< placeholder */
 };
 
+/**
+ * Content for a DBusString that is considered invalid for all
+ * operations, except that it is valid to call _dbus_string_free()
+ * during error handling.
+ */
+#define _DBUS_STRING_INIT_INVALID \
+{ \
+  NULL, /* dummy1 */ \
+  0, /* dummy2 */ \
+  0, /* dummy3 */ \
+  0, /* dummy_bit1 */ \
+  0, /* dummy_bit2 */ \
+  0, /* dummy_bit3 */ \
+  0 /* dummy_bits */ \
+}
+
 #ifdef DBUS_DISABLE_ASSERT
 /* Some simple inlining hacks; the current linker is not smart enough
  * to inline non-exported symbols across files in the library.

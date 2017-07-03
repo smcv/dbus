@@ -251,7 +251,12 @@ _dbus_string_init_from_string(DBusString       *str,
 }
 
 /**
- * Frees a string created by _dbus_string_init().
+ * Frees a string created by _dbus_string_init(), and fills it with the
+ * same contents as #_DBUS_STRING_INIT_INVALID.
+ *
+ * Unlike all other #DBusString API, it is also valid to call this function
+ * for a string that was filled with #_DBUS_STRING_INIT_INVALID.
+ * This is convenient for error rollback.
  *
  * @param str memory where the string is stored.
  */
@@ -259,20 +264,32 @@ void
 _dbus_string_free (DBusString *str)
 {
   DBusRealString *real = (DBusRealString*) str;
+  /* DBusRealString and DBusString have the same members in the same order,
+   * just differently-named */
+  DBusRealString invalid = _DBUS_STRING_INIT_INVALID;
+
+  /* Allow for the _DBUS_STRING_INIT_INVALID case */
+  if (real->str == NULL && real->len == 0 && real->allocated == 0 &&
+      !real->constant && !real->locked && !real->valid &&
+      real->align_offset == 0)
+    return;
+
   DBUS_GENERIC_STRING_PREAMBLE (real);
   
   if (real->constant)
-    return;
+    goto wipe;
 
   /* so it's safe if @p str returned by a failed
    * _dbus_string_init call
    * Bug: https://bugs.freedesktop.org/show_bug.cgi?id=65959
    */
   if (real->str == NULL)
-    return;
+    goto wipe;
 
   dbus_free (real->str - real->align_offset);
 
+wipe:
+  *real = invalid;
   real->valid = FALSE;
 }
 
