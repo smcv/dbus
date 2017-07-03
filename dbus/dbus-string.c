@@ -156,7 +156,7 @@ _dbus_string_init_preallocated (DBusString *str,
   
   real->constant = FALSE;
   real->locked = FALSE;
-  real->invalid = FALSE;
+  real->valid = TRUE;
   real->align_offset = 0;
   
   fixup_alignment (real);
@@ -225,7 +225,7 @@ _dbus_string_init_const_len (DBusString *str,
   real->allocated = real->len + _DBUS_STRING_ALLOCATION_PADDING; /* a lie, just to avoid special-case assertions... */
   real->constant = TRUE;
   real->locked = TRUE;
-  real->invalid = FALSE;
+  real->valid = TRUE;
   real->align_offset = 0;
 
   /* We don't require const strings to be 8-byte aligned as the
@@ -273,7 +273,7 @@ _dbus_string_free (DBusString *str)
 
   dbus_free (real->str - real->align_offset);
 
-  real->invalid = TRUE;
+  real->valid = FALSE;
 }
 
 static dbus_bool_t

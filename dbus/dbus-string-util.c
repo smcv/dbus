@@ -242,7 +242,7 @@ _dbus_string_test (void)
   _dbus_assert (real_test_static_string->allocated > 5);
   _dbus_assert (real_test_static_string->constant);
   _dbus_assert (real_test_static_string->locked);
-  _dbus_assert (!real_test_static_string->invalid);
+  _dbus_assert (real_test_static_string->valid);
   _dbus_assert (real_test_static_string->align_offset == 0);
 
   /* Test shortening and setting length */

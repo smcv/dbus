@@ -47,7 +47,7 @@ typedef struct
   int            allocated;      /**< Allocated size of data */
   unsigned int   constant : 1;   /**< String data is not owned by DBusString */
   unsigned int   locked : 1;     /**< DBusString has been locked and can't be changed */
-  unsigned int   invalid : 1;    /**< DBusString is invalid (e.g. already freed) */
+  unsigned int   valid : 1;      /**< DBusString is valid (initialized and not freed) */
   unsigned int   align_offset : 3; /**< str - align_offset is the actual malloc block */
 } DBusRealString;
 
@@ -77,7 +77,7 @@ _DBUS_STATIC_ASSERT (sizeof (DBusRealString) == sizeof (DBusString));
   do { \
       (void) real; /* might be unused unless asserting */ \
       _dbus_assert ((real) != NULL); \
-      _dbus_assert (!(real)->invalid); \
+      _dbus_assert ((real)->valid); \
       _dbus_assert ((real)->len >= 0); \
       _dbus_assert ((real)->allocated >= 0); \
       _dbus_assert ((real)->len <= ((real)->allocated - _DBUS_STRING_ALLOCATION_PADDING)); \

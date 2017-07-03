@@ -405,7 +405,7 @@ _dbus_string_get_const_udata_len (const DBusString *str, int start, int len)
                                    sizeof(_dbus_static_string_##name) - 1, \
                                    sizeof(_dbus_static_string_##name) + \
                                    _DBUS_STRING_ALLOCATION_PADDING,     \
-                                   TRUE, TRUE, FALSE, 0 }
+                                   TRUE, TRUE, TRUE, 0 }
 
 DBUS_END_DECLS
 
