@@ -267,6 +267,49 @@ test_basic (Fixture *f,
 }
 
 /*
+ * If we are running as root, assert that when one uid (root) creates a
+ * container server, another uid (TEST_USER_OTHER) cannot connect to it
+ */
+static void
+test_wrong_uid (Fixture *f,
+                gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GVariant *parameters;
+
+  if (f->skip)
+    return;
+
+  parameters = g_variant_new ("(ssa{sv}a{sv})",
+                              "com.example.NotFlatpak",
+                              "sample-app",
+                              NULL, /* no metadata */
+                              NULL); /* no named arguments */
+  if (!add_container_server (f, g_steal_pointer (&parameters)))
+    return;
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = test_try_connect_gdbus_as_user (f->socket_dbus_address,
+                                                     TEST_USER_OTHER,
+                                                     &f->error);
+
+  /* That might be skipped if we can't become TEST_USER_OTHER */
+  if (f->error != NULL &&
+      g_error_matches (f->error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED))
+    {
+      g_test_skip (f->error->message);
+      return;
+    }
+
+  /* The connection was unceremoniously closed */
+  g_assert_error (f->error, G_IO_ERROR, G_IO_ERROR_CLOSED);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Assert that named arguments are validated: passing an unsupported
  * named argument causes an error.
  */
@@ -432,6 +475,8 @@ main (int argc,
               setup, test_get_supported_arguments, teardown);
   g_test_add ("/containers/basic", Fixture, NULL,
               setup, test_basic, teardown);
+  g_test_add ("/containers/wrong-uid", Fixture, NULL,
+              setup, test_wrong_uid, teardown);
   g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
               setup, test_unsupported_parameter, teardown);
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
