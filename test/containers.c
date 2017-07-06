@@ -274,15 +274,22 @@ add_container_server (Fixture *f,
  * we expect (we can connect a confined connection to it, the confined
  * connection can talk to the dbus-daemon and to an unconfined connection,
  * and the socket gets cleaned up when the dbus-daemon terminates).
+ *
+ * This also tests simple cases for metadata.
  */
 static void
 test_basic (Fixture *f,
             gconstpointer context)
 {
 #ifdef HAVE_CONTAINERS_TEST
+  GVariant *asv;
   GVariant *parameters;
+  const gchar *confined_unique_name;
+  const gchar *path_from_query;
   const gchar *manager_unique_name;
+  const gchar *name;
   const gchar *name_owner;
+  const gchar *type;
   GStatBuf stat_buf;
   GVariant *tuple;
 
@@ -346,6 +353,38 @@ test_basic (Fixture *f,
   g_clear_error (&f->error);
   g_assert_null (tuple);
 
+  g_test_message ("Inspecting connection container info");
+  confined_unique_name = g_dbus_connection_get_unique_name (f->confined_conn);
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
+                                  g_variant_new ("(s)", confined_unique_name),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ossa{sv})");
+  g_variant_get (tuple, "(&o&s&s@a{sv})", &path_from_query, &type, &name, &asv);
+  g_assert_cmpstr (path_from_query, ==, f->instance_path);
+  g_assert_cmpstr (type, ==, "com.example.NotFlatpak");
+  g_assert_cmpstr (name, ==, "sample-app");
+  /* Trivial case: the metadata a{sv} is empty */
+  g_assert_cmpuint (g_variant_n_children (asv), ==, 0);
+  g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_test_message ("Inspecting container instance info");
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetInstanceInfo",
+                                  g_variant_new ("(o)", f->instance_path),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ssa{sv})");
+  g_variant_get (tuple, "(&s&s@a{sv})", &type, &name, &asv);
+  g_assert_cmpstr (type, ==, "com.example.NotFlatpak");
+  g_assert_cmpstr (name, ==, "sample-app");
+  /* Trivial case: the metadata a{sv} is empty */
+  g_assert_cmpuint (g_variant_n_children (asv), ==, 0);
+  g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&tuple, g_variant_unref);
+
   /* Check that the socket is cleaned up when the dbus-daemon is terminated */
   test_kill_pid (f->daemon_pid);
   g_spawn_close_pid (f->daemon_pid);
@@ -398,6 +437,133 @@ test_wrong_uid (Fixture *f,
 
   /* The connection was unceremoniously closed */
   g_assert_error (f->error, G_IO_ERROR, G_IO_ERROR_CLOSED);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
+ * Test for non-trivial metadata: assert that the metadata a{sv} is
+ * carried through correctly, and that the app name is allowed to be empty.
+ */
+static void
+test_metadata (Fixture *f,
+               gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GVariant *asv;
+  GVariant *tuple;
+  GVariant *parameters;
+  GVariantDict dict;
+  const gchar *confined_unique_name;
+  const gchar *path_from_query;
+  const gchar *name;
+  const gchar *type;
+  guint u;
+  gboolean b;
+  const gchar *s;
+
+  if (f->skip)
+    return;
+
+  g_variant_dict_init (&dict, NULL);
+  g_variant_dict_insert (&dict, "Species", "s", "Martes martes");
+  g_variant_dict_insert (&dict, "IsCrepuscular", "b", TRUE);
+  g_variant_dict_insert (&dict, "NChildren", "u", 2);
+
+  parameters = g_variant_new ("(ss@a{sv}a{sv})",
+                              "org.example.Springwatch",
+                              /* Verify that empty app names are OK */
+                              "",
+                              g_variant_dict_end (&dict),
+                              NULL); /* no named arguments */
+  if (!add_container_server (f, g_steal_pointer (&parameters)))
+    return;
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Inspecting connection credentials...");
+  confined_unique_name = g_dbus_connection_get_unique_name (f->confined_conn);
+  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+                                       "GetConnectionCredentials",
+                                       g_variant_new ("(s)",
+                                                      confined_unique_name),
+                                       G_VARIANT_TYPE ("(a{sv})"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(a{sv})");
+  asv = g_variant_get_child_value (tuple, 0);
+  g_variant_dict_init (&dict, asv);
+  g_assert_true (g_variant_dict_lookup (&dict,
+                                        DBUS_INTERFACE_CONTAINERS1 ".Instance",
+                                        "&o", &path_from_query));
+  g_assert_cmpstr (path_from_query, ==, f->instance_path);
+  g_assert_true (g_variant_dict_lookup (&dict,
+                                        DBUS_INTERFACE_CONTAINERS1 ".Type",
+                                        "&s", &type));
+  g_assert_cmpstr (type, ==, "org.example.Springwatch");
+  g_assert_true (g_variant_dict_lookup (&dict,
+                                        DBUS_INTERFACE_CONTAINERS1 ".Name",
+                                        "&s", &name));
+  g_assert_cmpstr (name, ==, "");
+  g_variant_dict_clear (&dict);
+  g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_test_message ("Inspecting connection container info");
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
+                                  g_variant_new ("(s)", confined_unique_name),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ossa{sv})");
+  g_variant_get (tuple, "(&o&s&s@a{sv})", &path_from_query, &type, &name, &asv);
+  g_assert_cmpstr (path_from_query, ==, f->instance_path);
+  g_assert_cmpstr (type, ==, "org.example.Springwatch");
+  g_assert_cmpstr (name, ==, "");
+  g_variant_dict_init (&dict, asv);
+  g_assert_true (g_variant_dict_lookup (&dict, "NChildren", "u", &u));
+  g_assert_cmpuint (u, ==, 2);
+  g_assert_true (g_variant_dict_lookup (&dict, "IsCrepuscular", "b", &b));
+  g_assert_cmpint (b, ==, TRUE);
+  g_assert_true (g_variant_dict_lookup (&dict, "Species", "&s", &s));
+  g_assert_cmpstr (s, ==, "Martes martes");
+  g_variant_dict_clear (&dict);
+  g_assert_cmpuint (g_variant_n_children (asv), ==, 3);
+  g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&tuple, g_variant_unref);
+
+  g_test_message ("Inspecting container instance info");
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetInstanceInfo",
+                                  g_variant_new ("(o)", f->instance_path),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (tuple);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ssa{sv})");
+  g_variant_get (tuple, "(&s&s@a{sv})", &type, &name, &asv);
+  g_assert_cmpstr (type, ==, "org.example.Springwatch");
+  g_assert_cmpstr (name, ==, "");
+  g_variant_dict_init (&dict, asv);
+  g_assert_true (g_variant_dict_lookup (&dict, "NChildren", "u", &u));
+  g_assert_cmpuint (u, ==, 2);
+  g_assert_true (g_variant_dict_lookup (&dict, "IsCrepuscular", "b", &b));
+  g_assert_cmpint (b, ==, TRUE);
+  g_assert_true (g_variant_dict_lookup (&dict, "Species", "&s", &s));
+  g_assert_cmpstr (s, ==, "Martes martes");
+  g_variant_dict_clear (&dict);
+  g_assert_cmpuint (g_variant_n_children (asv), ==, 3);
+  g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&tuple, g_variant_unref);
 
 #else /* !HAVE_CONTAINERS_TEST */
   g_test_skip ("Containers or gio-unix-2.0 not supported");
@@ -721,6 +887,78 @@ test_stop_server (Fixture *f,
 }
 
 /*
+ * Assert that we cannot get the container metadata for a path that
+ * isn't a container instance, or a bus name that isn't in a container
+ * or doesn't exist at all.
+ */
+static void
+test_invalid_metadata_getters (Fixture *f,
+                               gconstpointer context)
+{
+  const gchar *unique_name;
+  GVariant *tuple;
+  gchar *error_name;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_test_message ("Inspecting unconfined connection");
+  unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
+                                  g_variant_new ("(s)", unique_name),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_nonnull (f->error);
+  g_assert_null (tuple);
+  error_name = g_dbus_error_get_remote_error (f->error);
+#ifdef DBUS_ENABLE_CONTAINERS
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_NOT_CONTAINER);
+#else
+  /* TODO: We can use g_assert_error for this when we depend on GLib 2.42 */
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
+#endif
+  g_free (error_name);
+  g_clear_error (&f->error);
+
+  g_test_message ("Inspecting a non-connection");
+  unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
+                                  g_variant_new ("(s)", "com.example.Nope"),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_nonnull (f->error);
+  g_assert_null (tuple);
+#ifdef DBUS_ENABLE_CONTAINERS
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_NAME_HAS_NO_OWNER);
+#else
+  /* TODO: We can use g_assert_error for this when we depend on GLib 2.42 */
+  error_name = g_dbus_error_get_remote_error (f->error);
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
+  g_free (error_name);
+#endif
+  g_clear_error (&f->error);
+
+
+  g_test_message ("Inspecting container instance info");
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetInstanceInfo",
+                                  g_variant_new ("(o)", "/nope"),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_nonnull (f->error);
+  g_assert_null (tuple);
+  error_name = g_dbus_error_get_remote_error (f->error);
+#ifdef DBUS_ENABLE_CONTAINERS
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_NOT_CONTAINER);
+#else
+  /* TODO: We can use g_assert_error for this when we depend on GLib 2.42 */
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
+#endif
+  g_free (error_name);
+  g_clear_error (&f->error);
+}
+
+/*
  * Assert that named arguments are validated: passing an unsupported
  * named argument causes an error.
  */
@@ -1004,6 +1242,10 @@ main (int argc,
               &stop_server_force, setup, test_stop_server, teardown);
   g_test_add ("/containers/stop-server/with-manager", Fixture,
               &stop_server_with_manager, setup, test_stop_server, teardown);
+  g_test_add ("/containers/metadata", Fixture, NULL,
+              setup, test_metadata, teardown);
+  g_test_add ("/containers/invalid-metadata-getters", Fixture, NULL,
+              setup, test_invalid_metadata_getters, teardown);
   g_test_add ("/containers/unsupported-parameter", Fixture, NULL,
               setup, test_unsupported_parameter, teardown);
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
