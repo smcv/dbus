@@ -30,6 +30,7 @@
 BusContainers        *bus_containers_new           (void);
 BusContainers        *bus_containers_ref           (BusContainers *self);
 void                  bus_containers_unref         (BusContainers *self);
+void                  bus_containers_stop_listening (BusContainers *self);
 
 dbus_bool_t bus_containers_handle_add_server          (DBusConnection  *connection,
                                                        BusTransaction  *transaction,

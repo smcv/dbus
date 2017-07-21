@@ -102,7 +102,8 @@ server_get_context (DBusServer *server)
 
   bd = BUS_SERVER_DATA (server);
 
-  /* every DBusServer in the dbus-daemon has gone through setup_server() */
+  /* every DBusServer in the dbus-daemon's main loop has gone through
+   * bus_context_setup_server() */
   _dbus_assert (bd != NULL);
 
   context = bd->context;
@@ -220,6 +221,25 @@ setup_server (BusContext *context,
               char      **auth_mechanisms,
               DBusError  *error)
 {
+  if (!bus_context_setup_server (context, server, error))
+    return FALSE;
+
+  if (!dbus_server_set_auth_mechanisms (server, (const char**) auth_mechanisms))
+    {
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  dbus_server_set_new_connection_function (server, new_connection_callback,
+                                           context, NULL);
+  return TRUE;
+}
+
+dbus_bool_t
+bus_context_setup_server (BusContext                 *context,
+                          DBusServer                 *server,
+                          DBusError                  *error)
+{
   BusServerData *bd;
 
   bd = dbus_new0 (BusServerData, 1);
@@ -233,16 +253,6 @@ setup_server (BusContext *context,
     }
 
   bd->context = context;
-
-  if (!dbus_server_set_auth_mechanisms (server, (const char**) auth_mechanisms))
-    {
-      BUS_SET_OOM (error);
-      return FALSE;
-    }
-
-  dbus_server_set_new_connection_function (server,
-                                           new_connection_callback,
-                                           context, NULL);
 
   if (!dbus_server_set_watch_functions (server,
                                         add_server_watch,
@@ -1112,6 +1122,9 @@ bus_context_shutdown (BusContext  *context)
 
       link = _dbus_list_get_next_link (&context->servers, link);
     }
+
+  if (context->containers != NULL)
+    bus_containers_stop_listening (context->containers);
 }
 
 BusContext *
