@@ -1091,3 +1091,32 @@ bus_containers_remove_connection (BusContainers *self,
   dbus_connection_unref (connection);
 #endif /* DBUS_ENABLE_CONTAINERS */
 }
+
+dbus_bool_t
+bus_containers_connection_is_contained (DBusConnection *connection,
+                                        const char **path,
+                                        const char **type,
+                                        const char **name)
+{
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+
+  instance = dbus_connection_get_data (connection, contained_data_slot);
+
+  if (instance != NULL)
+    {
+      if (path != NULL)
+        *path = instance->path;
+
+      if (type != NULL)
+        *type = instance->type;
+
+      if (name != NULL)
+        *name = instance->name;
+
+      return TRUE;
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
+
+  return FALSE;
+}

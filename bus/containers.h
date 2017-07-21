@@ -49,6 +49,10 @@ dbus_bool_t bus_containers_supported_arguments_getter (BusContext      *context,
 
 void        bus_containers_remove_connection          (BusContainers *self,
                                                        DBusConnection *connection);
+dbus_bool_t bus_containers_connection_is_contained    (DBusConnection *connection,
+                                                       const char **path,
+                                                       const char **type,
+                                                       const char **name);
 
 static inline void
 bus_clear_containers (BusContainers **containers_p)

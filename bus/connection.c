@@ -588,6 +588,9 @@ cache_peer_loginfo_string (BusConnectionData *d,
   unsigned long pid;
   char *windows_sid = NULL, *security_label = NULL;
   dbus_bool_t prev_added;
+  const char *container = NULL;
+  const char *container_type = NULL;
+  const char *container_name = NULL;
 
   if (!_dbus_string_init (&loginfo_buf))
     return FALSE;
@@ -653,6 +656,29 @@ cache_peer_loginfo_string (BusConnectionData *d,
                                                "label=\"%s\"", security_label);
       dbus_free (security_label);
       security_label = NULL;
+      if (!did_append)
+        goto oom;
+      else
+        prev_added = TRUE;
+    }
+
+  if (bus_containers_connection_is_contained (connection, &container,
+                                              &container_type,
+                                              &container_name))
+    {
+      dbus_bool_t did_append;
+
+      if (prev_added)
+        {
+          if (!_dbus_string_append_byte (&loginfo_buf, ' '))
+            goto oom;
+        }
+
+      did_append = _dbus_string_append_printf (&loginfo_buf,
+                                               "container=%s %s=\"%s\")",
+                                               container,
+                                               container_type,
+                                               container_name);
       if (!did_append)
         goto oom;
       else
