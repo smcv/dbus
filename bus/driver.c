@@ -2576,6 +2576,11 @@ static const MessageHandler containers_message_handlers[] = {
     METHOD_FLAG_PRIVILEGED },
   { "StopListening", "o", "", bus_containers_handle_stop_listening,
     METHOD_FLAG_PRIVILEGED },
+  { "GetConnectionInstance", "s", "ossa{sv}",
+    bus_containers_handle_get_connection_instance,
+    METHOD_FLAG_NONE },
+  { "GetInstanceInfo", "o", "ssa{sv}", bus_containers_handle_get_instance_info,
+    METHOD_FLAG_NONE },
   { NULL, NULL, NULL, NULL }
 };
 static const PropertyHandler containers_property_handlers[] = {

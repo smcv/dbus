@@ -44,6 +44,14 @@ dbus_bool_t bus_containers_handle_stop_listening      (DBusConnection  *connecti
                                                        BusTransaction  *transaction,
                                                        DBusMessage     *message,
                                                        DBusError       *error);
+dbus_bool_t bus_containers_handle_get_instance_info   (DBusConnection  *connection,
+                                                       BusTransaction  *transaction,
+                                                       DBusMessage     *message,
+                                                       DBusError       *error);
+dbus_bool_t bus_containers_handle_get_connection_instance (DBusConnection *connection,
+                                                           BusTransaction *transaction,
+                                                           DBusMessage    *message,
+                                                           DBusError      *error);
 dbus_bool_t bus_containers_supported_arguments_getter (BusContext      *context,
                                                        DBusMessageIter *var_iter);
 
