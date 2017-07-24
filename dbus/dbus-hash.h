@@ -88,6 +88,7 @@ DBUS_PRIVATE_EXPORT
 void           _dbus_hash_iter_remove_entry        (DBusHashIter     *iter);
 DBUS_PRIVATE_EXPORT
 void*          _dbus_hash_iter_get_value           (DBusHashIter     *iter);
+DBUS_PRIVATE_EXPORT
 void           _dbus_hash_iter_set_value           (DBusHashIter     *iter,
                                                     void             *value);
 DBUS_PRIVATE_EXPORT
@@ -96,6 +97,7 @@ DBUS_PRIVATE_EXPORT
 const char*    _dbus_hash_iter_get_string_key      (DBusHashIter     *iter);
 DBUS_PRIVATE_EXPORT
 uintptr_t      _dbus_hash_iter_get_uintptr_key     (DBusHashIter     *iter);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t    _dbus_hash_iter_lookup              (DBusHashTable    *table,
                                                     void             *key,
                                                     dbus_bool_t       create_if_not_found,

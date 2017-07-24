@@ -85,6 +85,8 @@ struct BusContainers
   /* path borrowed from BusContainerInstance => unowned BusContainerInstance
    * The BusContainerInstance removes itself from here on destruction. */
   DBusHashTable *instances_by_path;
+  /* uid => (void *) (uintptr_t) number of containers */
+  DBusHashTable *n_containers_by_user;
   DBusString address_template;
   dbus_uint64_t next_container_id;
 };
@@ -190,6 +192,7 @@ bus_containers_unref (BusContainers *self)
   if (--self->refcount == 0)
     {
       _dbus_clear_hash_table (&self->instances_by_path);
+      _dbus_clear_hash_table (&self->n_containers_by_user);
       _dbus_string_free (&self->address_template);
       dbus_free (self);
 
@@ -307,9 +310,26 @@ bus_container_instance_unref (BusContainerInstance *self)
 
       /* It's OK to do this even if we were never added to instances_by_path,
        * because the paths are globally unique. */
-      if (self->path != NULL && self->containers->instances_by_path != NULL)
-        _dbus_hash_table_remove_string (self->containers->instances_by_path,
-                                        self->path);
+      if (self->path != NULL && self->containers->instances_by_path != NULL &&
+          _dbus_hash_table_remove_string (self->containers->instances_by_path,
+                                          self->path))
+        {
+          DBusHashIter entry;
+          uintptr_t n = 0;
+
+          if (!_dbus_hash_iter_lookup (self->containers->n_containers_by_user,
+                                       (void *) (uintptr_t) self->uid,
+                                       FALSE, &entry))
+            _dbus_assert_not_reached ("Container should not be placed in "
+                                      "instances_by_path until its "
+                                      "n_containers_by_user entry has "
+                                      "been allocated");
+
+          n = (uintptr_t) _dbus_hash_iter_get_value (&entry);
+          _dbus_assert (n > 0);
+          n -= 1;
+          _dbus_hash_iter_set_value (&entry, (void *) n);
+        }
 
       _dbus_clear_variant (&self->metadata);
       bus_context_unref (self->context);
@@ -664,6 +684,8 @@ bus_containers_handle_add_server (DBusConnection *connection,
   DBusMessage *reply = NULL;
   int metadata_size;
   int limit;
+  DBusHashIter n_containers_by_user_entry;
+  uintptr_t this_user_containers = 0;
 
   context = bus_transaction_get_context (transaction);
   containers = bus_context_get_containers (context);
@@ -811,6 +833,15 @@ bus_containers_handle_add_server (DBusConnection *connection,
         goto oom;
     }
 
+  if (containers->n_containers_by_user == NULL)
+    {
+      containers->n_containers_by_user = _dbus_hash_table_new (DBUS_HASH_UINTPTR,
+                                                               NULL, NULL);
+
+      if (containers->n_containers_by_user == NULL)
+        goto oom;
+    }
+
   limit = bus_context_get_max_containers (context);
 
   if (_dbus_hash_table_get_n_entries (containers->instances_by_path) >= limit)
@@ -829,9 +860,45 @@ bus_containers_handle_add_server (DBusConnection *connection,
       goto fail;
     }
 
+  if (!_dbus_hash_iter_lookup (containers->n_containers_by_user,
+                               /* We statically assert that a uid fits in a
+                                * uintptr_t, so this can't lose information */
+                               (void *) (uintptr_t) instance->uid, TRUE,
+                               &n_containers_by_user_entry))
+    goto oom;
+
+  this_user_containers = (uintptr_t) _dbus_hash_iter_get_value (&n_containers_by_user_entry);
+  limit = bus_context_get_max_containers_per_user (context);
+
+  /* We need to be careful with types here because this_user_containers is
+   * unsigned. */
+  if (limit <= 0 || this_user_containers >= (unsigned) limit)
+    {
+      DBusError local_error = DBUS_ERROR_INIT;
+
+      dbus_set_error (&local_error, DBUS_ERROR_LIMITS_EXCEEDED,
+                      "Connection \"%s\" (%s) is not allowed to create more "
+                      "container servers for uid %lu "
+                      "(max_containers_per_user=%d)",
+                      bus_connection_get_name (connection),
+                      bus_connection_get_loginfo (connection),
+                      instance->uid, limit);
+      bus_context_log_literal (context, DBUS_SYSTEM_LOG_WARNING,
+                               local_error.message);
+      dbus_move_error (&local_error, error);
+      goto fail;
+    }
+
   if (!_dbus_hash_table_insert_string (containers->instances_by_path,
                                        instance->path, instance))
     goto oom;
+
+  /* This cannot fail (we already allocated the memory) so we can do it after
+   * we already succeeded in adding it to instances_by_path. The matching
+   * decrement is done whenever we remove it from instances_by_path. */
+  this_user_containers += 1;
+  _dbus_hash_iter_set_value (&n_containers_by_user_entry,
+                             (void *) this_user_containers);
 
   if (!_dbus_list_append (&creator_data->instances, instance))
     goto oom;
