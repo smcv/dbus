@@ -403,6 +403,29 @@ int
 main (int argc,
     char **argv)
 {
+  GError *error = NULL;
+  gchar *runtime_dir;
+  gchar *runtime_dbus_dir;
+  gchar *runtime_containers_dir;
+  gchar *runtime_services_dir;
+  int ret;
+
+  runtime_dir = g_dir_make_tmp ("dbus-test-containers.XXXXXX", &error);
+
+  if (runtime_dir == NULL)
+    {
+      g_print ("Bail out! %s\n", error->message);
+      g_clear_error (&error);
+      return 1;
+    }
+
+  g_setenv ("XDG_RUNTIME_DIR", runtime_dir, TRUE);
+  runtime_dbus_dir = g_build_filename (runtime_dir, "dbus-1", NULL);
+  runtime_containers_dir = g_build_filename (runtime_dir, "dbus-1",
+      "containers", NULL);
+  runtime_services_dir = g_build_filename (runtime_dir, "dbus-1",
+      "services", NULL);
+
   test_init (&argc, &argv);
 
   g_test_add ("/containers/get-supported-arguments", Fixture, NULL,
@@ -414,5 +437,11 @@ main (int argc,
   g_test_add ("/containers/invalid-type-name", Fixture, NULL,
               setup, test_invalid_type_name, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+
+  test_rmdir_if_exists (runtime_containers_dir);
+  test_rmdir_if_exists (runtime_services_dir);
+  test_rmdir_if_exists (runtime_dbus_dir);
+  test_rmdir_must_exist (runtime_dir);
+  return ret;
 }
