@@ -4630,7 +4630,7 @@ _dbus_logv (DBusSystemLogSeverity  severity,
       switch (severity)
         {
           case DBUS_SYSTEM_LOG_INFO:
-            flags =  LOG_DAEMON | LOG_NOTICE;
+            flags =  LOG_DAEMON | LOG_INFO;
             break;
           case DBUS_SYSTEM_LOG_WARNING:
             flags =  LOG_DAEMON | LOG_WARNING;
