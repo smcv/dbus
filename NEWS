@@ -1,6 +1,19 @@
 D-Bus 1.11.18 (UNRELEASED)
 ==
 
+Build-time configuration changes:
+
+• By default, dbus-daemon on Unix no longer checks for flag files
+  /var/run/console/${username} created by the obsolete pam_console and
+  pam_foreground PAM modules when deciding whether ${username} is
+  currently at the console. The old default behaviour can be restored
+  by specifying --with-console-auth-dir=/var/run/console in the
+  recommended Autotools build system, or
+  -DDBUS_CONSOLE_AUTH_DIR=/var/run/console in CMake. This feature is
+  now deprecated, and will be removed in dbus 1.13 unless feedback via
+  fd.o #101629 indicates that this would be problematic.
+  (fd.o #101629, Simon McVittie)
+
 Enhancements:
 
 • <allow> and <deny> rules in dbus-daemon configuration can now

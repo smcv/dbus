@@ -548,7 +548,7 @@ dbus_bool_t
 _dbus_user_at_console (const char *username,
                        DBusError  *error)
 {
-
+#ifdef DBUS_CONSOLE_AUTH_DIR
   DBusString u, f;
   dbus_bool_t result;
 
@@ -579,6 +579,9 @@ _dbus_user_at_console (const char *username,
   _dbus_string_free (&f);
 
   return result;
+#else
+  return FALSE;
+#endif
 }
 
 

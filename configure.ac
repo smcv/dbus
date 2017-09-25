@@ -1606,16 +1606,10 @@ fi
 AC_SUBST(DBUS_SYSTEM_PID_FILE)
 
 #### Directory to check for console ownership
-if ! test -z "$with_console_auth_dir"; then
-   DBUS_CONSOLE_AUTH_DIR=$with_console_auth_dir
-else
-   # We don't use runstatedir for this, because /var/run is the
-   # path that was traditionally used by pam_console and pam_foreground.
-   DBUS_CONSOLE_AUTH_DIR=/var/run/console/
-fi
-
-AC_SUBST(DBUS_CONSOLE_AUTH_DIR)
-AC_DEFINE_UNQUOTED(DBUS_CONSOLE_AUTH_DIR, "$DBUS_CONSOLE_AUTH_DIR", [Directory to check for console ownerhip])
+AS_IF([test -n "$with_console_auth_dir" && test "x$with_console_auth_dir" != xno],
+    [AC_DEFINE_UNQUOTED([DBUS_CONSOLE_AUTH_DIR], ["$with_console_auth_dir"],
+        [Directory to check for pam_console/pam_foreground flag files, or undefined])],
+    [with_console_auth_dir=])
 
 #### File to check for console ownership
 if test x$have_console_owner_file = xyes; then
@@ -1982,7 +1976,7 @@ echo "
         System bus PID file:      ${DBUS_SYSTEM_PID_FILE}
         Session bus listens on:   ${DBUS_SESSION_BUS_LISTEN_ADDRESS}
         Session clients connect to: ${DBUS_SESSION_BUS_CONNECT_ADDRESS}
-        Console auth dir:         ${DBUS_CONSOLE_AUTH_DIR}
+        pam_console auth dir:     ${with_console_auth_dir:-(none)}
         Console owner file:       ${have_console_owner_file}
         Console owner file path:  ${DBUS_CONSOLE_OWNER_FILE}
 	System bus user:          ${DBUS_USER}
