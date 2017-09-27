@@ -95,7 +95,7 @@ make="make -j${ci_parallel} V=1 VERBOSE=1"
 
 case "$ci_host" in
     (mingw)
-        mirror=http://repo.msys2.org/msys/i686
+        mirror=http://repo.msys2.org/mingw/i686
         mingw="$(pwd)/mingw32"
         install -d "${mingw}"
         export PKG_CONFIG_LIBDIR="${mingw}/lib/pkgconfig"
