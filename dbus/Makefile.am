@@ -310,6 +310,7 @@ libdbus_1_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	$(SYMBOL_EXPORT_LDFLAGS) \
 	-no-undefined \
+	$(dbus_res_ldflag) \
 	$(NULL)
 
 libdbus_internal_la_LIBADD=$(LIBDBUS_LIBS) libdbus-1.la
