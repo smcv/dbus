@@ -44,21 +44,8 @@ if DBUS_WIN
 
 SUFFIXES = .rc
 
-.rc.o:
-	$(WINDRES) $< -o $@
-
-# We can't just put versioninfo.rc in SOURCES and let Automake infer
-# how to make versioninfo.o, because libtool wants libtool objects (.lo),
-# not plain COFF objects (.o). Add it to the linker command explicitly
-# instead.
-dbus_res = versioninfo.o
-EXTRA_libdbus_1_la_DEPENDENCIES = $(dbus_res)
-dbus_res_ldflag = -Wl,$(dbus_res)
-
-else
-
-dbus_res =
-dbus_res_ldflag =
+.rc.lo:
+	$(LIBTOOL) $(AM_V_lt) --tag=RC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(RC) $< -o $@
 
 endif
 
@@ -69,7 +56,9 @@ endif
 if DBUS_WIN
 DBUS_LIB_arch_sources = 			\
 	dbus-server-win.c 			\
-	dbus-server-win.h
+	dbus-server-win.h			\
+	versioninfo.rc				\
+	$(NULL)
 
 if DBUS_WINCE
 wince_source = dbus-sysdeps-wince-glue.h dbus-sysdeps-wince-glue.c
@@ -303,7 +292,6 @@ libdbus_1_la_LDFLAGS = \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
 	$(SYMBOL_EXPORT_LDFLAGS) \
 	-no-undefined \
-	$(dbus_res_ldflag) \
 	$(NULL)
 
 libdbus_internal_la_LIBADD=$(LIBDBUS_LIBS) libdbus-1.la
