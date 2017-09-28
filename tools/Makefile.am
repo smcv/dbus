@@ -118,7 +118,7 @@ if DBUS_WIN
 SUFFIXES = .rc
 
 .rc.o:
-	$(WINDRES) $< -o $@
+	$(RC) $< -o $@
 
 nodist_dbus_update_activation_environment_SOURCES = disable-uac.rc
 
