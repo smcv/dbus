@@ -55,17 +55,10 @@ dbus_res = versioninfo.o
 EXTRA_libdbus_1_la_DEPENDENCIES = $(dbus_res)
 dbus_res_ldflag = -Wl,$(dbus_res)
 
-no_undefined = -no-undefined
-export_symbols =
-
-intllibs =
-
 else
+
 dbus_res =
 dbus_res_ldflag =
-no_undefined =
-
-intllibs = @LTLIBINTL@
 
 endif
 
