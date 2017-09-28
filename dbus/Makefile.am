@@ -47,12 +47,17 @@ SUFFIXES = .rc
 .rc.o:
 	$(WINDRES) $< -o $@
 
+# We can't just put versioninfo.rc in SOURCES and let Automake infer
+# how to make versioninfo.o, because libtool wants libtool objects (.lo),
+# not plain COFF objects (.o). Add it to the linker command explicitly
+# instead.
 dbus_res = versioninfo.o
+EXTRA_libdbus_1_la_DEPENDENCIES = $(dbus_res)
 dbus_res_ldflag = -Wl,$(dbus_res)
+
 no_undefined = -no-undefined
 export_symbols =
 
-EXTRA_libdbus_1_la_DEPENDENCIES = $(dbus_res)
 intllibs =
 
 else
