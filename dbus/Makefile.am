@@ -42,7 +42,7 @@ lib_LTLIBRARIES=libdbus-1.la
 #
 if DBUS_WIN
 
-SUFFIXES = rc
+SUFFIXES = .rc
 
 .rc.o:
 	$(WINDRES) $< -o $@
