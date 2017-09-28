@@ -151,10 +151,8 @@ if test "$dbus_win" = yes; then
     # Assume DBUS_VERSION is always three numbers
     BUILD_FILEVERSION=`echo "$DBUS_VERSION" | sed -e 's/\./,/g'`,0
     AC_SUBST(BUILD_FILEVERSION)
-    AC_CHECK_TOOL(WINDRES, windres, no)
-    if test "$WINDRES" = no; then
-      AC_MSG_ERROR([*** Could not find an implementation of windres in your PATH.])
-    fi
+    AS_IF([test -z "$RC"],
+        [AC_MSG_ERROR([An implementation of windres is required])])
     if test "$dbus_wince" = yes; then
       AC_DEFINE(DBUS_WINCE,1,[Defined if we run on a W32 CE API based system])
       AC_DEFINE(_WIN32_WCE, 0x0502, [Defined to get newer W32 CE APIs])
