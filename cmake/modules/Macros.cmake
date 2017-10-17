@@ -30,18 +30,6 @@ if(DBUS_BUILD_TESTS AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Win
     endif()
 endif()
 
-MACRO(TIMESTAMP RESULT)
-    if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-        EXECUTE_PROCESS(COMMAND "cmd" " /C date /T" OUTPUT_VARIABLE DATE)
-        string(REGEX REPLACE "(..)[/.](..)[/.](....).*" "\\3\\2\\1" DATE ${DATE})
-        EXECUTE_PROCESS(COMMAND "cmd" " /C time /T" OUTPUT_VARIABLE TIME)
-        string(REGEX REPLACE "(..):(..)" "\\1\\2" TIME ${TIME})
-        set (${RESULT} "${DATE}${TIME}")
-    else ()
-        EXECUTE_PROCESS(COMMAND "date" "+%Y%m%d%H%M" OUTPUT_VARIABLE ${RESULT})
-    endif ()
-ENDMACRO()
-
 macro(add_test_executable _target _source)
     add_executable(${_target} ${_source})
     target_link_libraries(${_target} ${ARGN})
