@@ -240,13 +240,12 @@ set(libdbus_HEADERS
 	${DBUS_LIB_HEADERS}
 	${DBUS_SHARED_HEADERS}
 )
-if (MSVC)
-    set (BUILD_FILEVERSION ${DBUS_MAJOR_VERSION},${DBUS_MINOR_VERSION},${DBUS_MICRO_VERSION},${DBUS_PATCH_VERSION})
-    set (BUILD_TIMESTAMP ${DBUS_BUILD_TIMESTAMP})
-    
-    configure_file(${DBUS_DIR}/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo.rc)
-    list(APPEND libdbus_SOURCES versioninfo.rc)
-endif (MSVC)
+
+set (BUILD_FILEVERSION ${DBUS_MAJOR_VERSION},${DBUS_MINOR_VERSION},${DBUS_MICRO_VERSION},${DBUS_PATCH_VERSION})
+set (BUILD_TIMESTAMP ${DBUS_BUILD_TIMESTAMP})
+
+configure_file(${DBUS_DIR}/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo.rc)
+list(APPEND libdbus_SOURCES versioninfo.rc)
 
 if(MSVC_IDE)
 	project_source_group(${GROUP_CODE} DBUS_LIB_SOURCES DBUS_LIB_HEADERS)
