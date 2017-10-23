@@ -261,9 +261,7 @@ case "$ci_buildsys" in
                 set "$@" -D CMAKE_INCLUDE_PATH="${mingw}/include"
                 set "$@" -D CMAKE_LIBRARY_PATH="${mingw}/lib"
                 set "$@" -D EXPAT_LIBRARY="${mingw}/lib/libexpat.dll.a"
-                set "$@" -D GLIB2_LIBRARIES="${mingw}/lib/libglib-2.0.dll.a"
-                set "$@" -D GOBJECT_LIBRARIES="${mingw}/lib/libgobject-2.0.dll.a"
-                set "$@" -D GIO_LIBRARIES="${mingw}/lib/libgio-2.0.dll.a"
+                set "$@" -D GLIB2_LIBRARIES="${mingw}/lib/libglib-2.0.dll.a ${mingw}/lib/libgobject-2.0.dll.a ${mingw}/lib/libgio-2.0.dll.a"
                 shift
                 # don't run tests yet, Wine needs Xvfb and more
                 # msys2 libraries

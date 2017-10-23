@@ -89,14 +89,12 @@ if(DBUS_WITH_GLIB)
 
     add_definitions(
         ${GLIB2_DEFINITIONS}
-        ${GOBJECT_DEFINITIONS}
     )
     include_directories(
         ${GLIB2_INCLUDE_DIR}
-        ${GOBJECT_INCLUDE_DIR}
     )
 
-    set(TEST_LIBRARIES ${DBUS_INTERNAL_LIBRARIES} dbus-testutils dbus-testutils-glib ${GLIB2_LIBRARIES} ${GOBJECT_LIBRARIES})
+    set(TEST_LIBRARIES ${DBUS_INTERNAL_LIBRARIES} dbus-testutils dbus-testutils-glib ${GLIB2_LIBRARIES})
 
     add_test_executable(test-corrupt ${CMAKE_SOURCE_DIR}/../test/corrupt.c ${TEST_LIBRARIES})
     add_test_executable(test-dbus-daemon ${CMAKE_SOURCE_DIR}/../test/dbus-daemon.c ${TEST_LIBRARIES})

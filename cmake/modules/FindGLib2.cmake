@@ -32,12 +32,17 @@ find_library(GLIB2_LIBRARY
              HINTS ${PC_LibGLIB2_LIBDIR}
 )
 
+find_library(GOBJECT2_LIBRARY
+             NAMES gobject-2.0
+             HINTS ${PC_LibGLIB2_LIBDIR}
+)
+
 find_library(GIO2_LIBRARY
              NAMES gio-2.0
              HINTS ${PC_LibGLIB2_LIBDIR}
 )
 
-set(GLIB2_LIBRARIES ${GLIB2_LIBRARY} ${GIO2_LIBRARY})
+set(GLIB2_LIBRARIES ${GLIB2_LIBRARY} ${GOBJECT2_LIBRARY} ${GIO2_LIBRARY})
 
 # search the glibconfig.h include dir under the same root where the library is found
 get_filename_component(glib2LibDir "${GLIB2_LIBRARY}" PATH)
