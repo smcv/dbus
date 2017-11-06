@@ -55,6 +55,9 @@ typedef struct
   BusContainers *containers;
   DBusServer *server;
   DBusConnection *creator;
+  /* List of owned DBusConnection, removed when the DBusConnection is
+   * removed from the bus */
+  DBusList *connections;
   unsigned long uid;
 } BusContainerInstance;
 
@@ -219,6 +222,11 @@ bus_container_instance_unref (BusContainerInstance *self)
        * BusContainerInstance */
       _dbus_assert (self->server == NULL);
 
+      /* Similarly, as long as there are connections, the BusContainerInstance
+       * can't be freed, because each connection holds a reference to the
+       * BusContainerInstance */
+      _dbus_assert (self->connections == NULL);
+
       creator_data = dbus_connection_get_data (self->creator,
                                                container_creator_data_slot);
       _dbus_assert (creator_data != NULL);
@@ -376,6 +384,11 @@ bus_container_instance_lost_connection (BusContainerInstance *instance,
   bus_container_instance_ref (instance);
   dbus_connection_ref (connection);
 
+  /* This is O(n), but we don't expect to have many connections per
+   * container instance. */
+  if (_dbus_list_remove (&instance->connections, connection))
+    dbus_connection_unref (connection);
+
   dbus_connection_set_data (connection, contained_data_slot, NULL, NULL);
 
   dbus_connection_unref (connection);
@@ -394,6 +407,16 @@ new_connection_cb (DBusServer     *server,
                                  (DBusFreeFunction) bus_container_instance_unref))
     {
       bus_container_instance_unref (instance);
+      bus_container_instance_lost_connection (instance, new_connection);
+      return;
+    }
+
+  if (_dbus_list_append (&instance->connections, new_connection))
+    {
+      dbus_connection_ref (new_connection);
+    }
+  else
+    {
       bus_container_instance_lost_connection (instance, new_connection);
       return;
     }
@@ -819,6 +842,7 @@ bus_containers_remove_connection (BusContainers *self,
 {
 #ifdef DBUS_ENABLE_CONTAINERS
   BusContainerCreatorData *creator_data;
+  BusContainerInstance *instance;
 
   dbus_connection_ref (connection);
   creator_data = dbus_connection_get_data (connection,
@@ -833,7 +857,7 @@ bus_containers_remove_connection (BusContainers *self,
            iter != NULL;
            iter = next)
         {
-          BusContainerInstance *instance = iter->data;
+          instance = iter->data;
 
           /* Remember where we got to before we do something that might free
            * iter and instance */
@@ -845,6 +869,18 @@ bus_containers_remove_connection (BusContainers *self,
            * connections to this instance */
           bus_container_instance_stop_listening (instance);
         }
+    }
+
+  instance = dbus_connection_get_data (connection, contained_data_slot);
+
+  if (instance != NULL)
+    {
+      bus_container_instance_ref (instance);
+
+      if (_dbus_list_remove (&instance->connections, connection))
+        dbus_connection_unref (connection);
+
+      bus_container_instance_unref (instance);
     }
 
   dbus_connection_unref (connection);
