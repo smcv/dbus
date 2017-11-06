@@ -71,13 +71,24 @@ struct BusContainers
   dbus_uint64_t next_container_id;
 };
 
+/* Data slot on DBusConnection, holding BusContainerInstance */
+static dbus_int32_t contained_data_slot = -1;
+
 BusContainers *
 bus_containers_new (void)
 {
   /* We allocate the hash table lazily, expecting that the common case will
    * be a connection where this feature is never used */
-  BusContainers *self = dbus_new0 (BusContainers, 1);
+  BusContainers *self = NULL;
   DBusString invalid = _DBUS_STRING_INIT_INVALID;
+
+  /* One reference per BusContainers, unless we ran out of memory the first
+   * time we tried to allocate it, in which case it will be -1 when we
+   * free the BusContainers */
+  if (!dbus_connection_allocate_data_slot (&contained_data_slot))
+    goto oom;
+
+  self = dbus_new0 (BusContainers, 1);
 
   if (self == NULL)
     goto oom;
@@ -121,7 +132,16 @@ bus_containers_new (void)
   return self;
 
 oom:
-  bus_clear_containers (&self);
+  if (self != NULL)
+    {
+      /* This will free the data slot too */
+      bus_containers_unref (self);
+    }
+  else
+    {
+      if (contained_data_slot != -1)
+        dbus_connection_free_data_slot (&contained_data_slot);
+    }
 
   return NULL;
 }
@@ -147,6 +167,9 @@ bus_containers_unref (BusContainers *self)
       _dbus_clear_hash_table (&self->instances_by_path);
       _dbus_string_free (&self->address_template);
       dbus_free (self);
+
+      if (contained_data_slot != -1)
+        dbus_connection_free_data_slot (&contained_data_slot);
     }
 }
 
@@ -309,6 +332,14 @@ new_connection_cb (DBusServer     *server,
                    void           *data)
 {
   BusContainerInstance *instance = data;
+
+  if (!dbus_connection_set_data (new_connection, contained_data_slot,
+                                 bus_container_instance_ref (instance),
+                                 (DBusFreeFunction) bus_container_instance_unref))
+    {
+      bus_container_instance_unref (instance);
+      return;
+    }
 
   /* If this fails it logs a warning, so we don't need to do that */
   if (!bus_context_add_incoming_connection (instance->context, new_connection))
