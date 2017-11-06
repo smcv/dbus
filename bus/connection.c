@@ -725,15 +725,13 @@ bus_connections_setup_connection (BusConnections *connections,
                                   DBusConnection *connection)
 {
 
-  BusConnectionData *d;
-  dbus_bool_t retval;
+  BusConnectionData *d = NULL;
   DBusError error;
 
-  
   d = dbus_new0 (BusConnectionData, 1);
   
   if (d == NULL)
-    return FALSE;
+    goto oom;
 
   d->connections = connections;
   d->connection = connection;
@@ -747,39 +745,35 @@ bus_connections_setup_connection (BusConnections *connections,
                                  connection_data_slot,
                                  d, free_connection_data))
     {
+      /* We have to free d explicitly, because this is the only code
+       * path where it's non-NULL but dbus_connection_set_data() hasn't
+       * taken responsibility for freeing it. */
       dbus_free (d);
-      return FALSE;
+      d = NULL;
+      goto oom;
     }
 
   dbus_connection_set_route_peer_messages (connection, TRUE);
-  
-  retval = FALSE;
 
   dbus_error_init (&error);
   d->selinux_id = bus_selinux_init_connection_id (connection,
                                                   &error);
   if (dbus_error_is_set (&error))
     {
-      /* This is a bit bogus because we pretend all errors
-       * are OOM; this is done because we know that in bus.c
-       * an OOM error disconnects the connection, which is
-       * the same thing we want on any other error.
-       */
+      bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                       "Unable to set up new connection: %s", error.message);
       dbus_error_free (&error);
-      goto out;
+      goto error;
     }
 
   d->apparmor_confinement = bus_apparmor_init_connection_confinement (connection,
                                                                       &error);
   if (dbus_error_is_set (&error))
     {
-      /* This is a bit bogus because we pretend all errors
-       * are OOM; this is done because we know that in bus.c
-       * an OOM error disconnects the connection, which is
-       * the same thing we want on any other error.
-       */
+      bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                       "Unable to set up new connection: %s", error.message);
       dbus_error_free (&error);
-      goto out;
+      goto error;
     }
 
   if (!dbus_connection_set_watch_functions (connection,
@@ -788,14 +782,14 @@ bus_connections_setup_connection (BusConnections *connections,
                                             toggle_connection_watch,
                                             connection,
                                             NULL))
-    goto out;
+    goto oom;
   
   if (!dbus_connection_set_timeout_functions (connection,
                                               add_connection_timeout,
                                               remove_connection_timeout,
                                               NULL,
                                               connection, NULL))
-    goto out;
+    goto oom;
 
   /* For now we don't need to set a Windows user function because
    * there are no policies in the config file controlling what
@@ -813,18 +807,18 @@ bus_connections_setup_connection (BusConnections *connections,
 
   d->link_in_connection_list = _dbus_list_alloc_link (connection);
   if (d->link_in_connection_list == NULL)
-    goto out;
+    goto oom;
   
   /* Setup the connection with the dispatcher */
   if (!bus_dispatch_add_connection (connection))
-    goto out;
+    goto oom;
 
   if (dbus_connection_get_dispatch_status (connection) != DBUS_DISPATCH_COMPLETE)
     {
       if (!_dbus_loop_queue_dispatch (bus_context_get_loop (connections->context), connection))
         {
           bus_dispatch_remove_connection (connection);
-          goto out;
+          goto oom;
         }
     }
 
@@ -833,12 +827,12 @@ bus_connections_setup_connection (BusConnections *connections,
                                                    pending_unix_fds_timeout_cb,
                                                    connection, NULL);
   if (d->pending_unix_fds_timeout == NULL)
-    goto out;
+    goto oom;
 
   _dbus_timeout_disable (d->pending_unix_fds_timeout);
   if (!_dbus_loop_add_timeout (bus_context_get_loop (connections->context),
                                d->pending_unix_fds_timeout))
-    goto out;
+    goto oom;
 
   _dbus_connection_set_pending_fds_function (connection,
           (DBusPendingFdsChangeFunction) check_pending_fds_cb,
@@ -861,10 +855,14 @@ bus_connections_setup_connection (BusConnections *connections,
    * stop accept()ing any more, to avert a DoS. See fd.o #80919 */
   bus_context_check_all_watches (d->connections->context);
   
-  retval = TRUE;
+  return TRUE;
 
- out:
-  if (!retval)
+oom:
+  bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                   "No memory to set up new connection");
+  /* fall through */
+error:
+  if (d != NULL)
     {
       d->selinux_id = NULL;
 
@@ -916,7 +914,7 @@ bus_connections_setup_connection (BusConnections *connections,
       /* "d" has now been freed */
     }
   
-  return retval;
+  return FALSE;
 }
 
 void

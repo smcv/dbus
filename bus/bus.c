@@ -172,10 +172,9 @@ new_connection_callback (DBusServer     *server,
 {
   BusContext *context = data;
 
+  /* If this fails it logs a warning, so we don't need to do that */
   if (!bus_connections_setup_connection (context->connections, new_connection))
     {
-      _dbus_verbose ("No memory to setup new connection\n");
-
       /* if we don't do this, it will get unref'd without
        * being disconnected... kind of strange really
        * that we have to do this, people won't get it right
