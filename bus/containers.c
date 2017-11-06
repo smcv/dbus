@@ -54,8 +54,20 @@ typedef struct
   BusContext *context;
   BusContainers *containers;
   DBusServer *server;
+  DBusConnection *creator;
   unsigned long uid;
 } BusContainerInstance;
+
+/* Data attached to a DBusConnection that has created container instances. */
+typedef struct
+{
+  /* List of instances created by this connection; unowned.
+   * The BusContainerInstance removes itself from here on destruction. */
+  DBusList *instances;
+} BusContainerCreatorData;
+
+/* Data slot on DBusConnection, holding BusContainerCreatorData */
+static dbus_int32_t container_creator_data_slot = -1;
 
 /*
  * Singleton data structure encapsulating the container-related parts of
@@ -86,6 +98,10 @@ bus_containers_new (void)
    * time we tried to allocate it, in which case it will be -1 when we
    * free the BusContainers */
   if (!dbus_connection_allocate_data_slot (&contained_data_slot))
+    goto oom;
+
+  /* Ditto */
+  if (!dbus_connection_allocate_data_slot (&container_creator_data_slot))
     goto oom;
 
   self = dbus_new0 (BusContainers, 1);
@@ -141,6 +157,9 @@ oom:
     {
       if (contained_data_slot != -1)
         dbus_connection_free_data_slot (&contained_data_slot);
+
+      if (container_creator_data_slot != -1)
+        dbus_connection_free_data_slot (&container_creator_data_slot);
     }
 
   return NULL;
@@ -170,6 +189,9 @@ bus_containers_unref (BusContainers *self)
 
       if (contained_data_slot != -1)
         dbus_connection_free_data_slot (&contained_data_slot);
+
+      if (container_creator_data_slot != -1)
+        dbus_connection_free_data_slot (&container_creator_data_slot);
     }
 }
 
@@ -190,10 +212,17 @@ bus_container_instance_unref (BusContainerInstance *self)
 
   if (--self->refcount == 0)
     {
+      BusContainerCreatorData *creator_data;
+
       /* As long as the server is listening, the BusContainerInstance can't
        * be freed, because the DBusServer holds a reference to the
        * BusContainerInstance */
       _dbus_assert (self->server == NULL);
+
+      creator_data = dbus_connection_get_data (self->creator,
+                                               container_creator_data_slot);
+      _dbus_assert (creator_data != NULL);
+      _dbus_list_remove (&creator_data->instances, self);
 
       /* It's OK to do this even if we were never added to instances_by_path,
        * because the paths are globally unique. */
@@ -204,6 +233,7 @@ bus_container_instance_unref (BusContainerInstance *self)
       _dbus_clear_variant (&self->metadata);
       bus_context_unref (self->context);
       bus_containers_unref (self->containers);
+      dbus_connection_unref (self->creator);
       dbus_free (self->path);
       dbus_free (self->type);
       dbus_free (self->name);
@@ -237,6 +267,7 @@ bus_container_instance_stop_listening (BusContainerInstance *self)
 static BusContainerInstance *
 bus_container_instance_new (BusContext *context,
                             BusContainers *containers,
+                            DBusConnection *creator,
                             DBusError *error)
 {
   BusContainerInstance *self = NULL;
@@ -244,6 +275,7 @@ bus_container_instance_new (BusContext *context,
 
   _dbus_assert (context != NULL);
   _dbus_assert (containers != NULL);
+  _dbus_assert (creator != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
   if (!_dbus_string_init (&path))
@@ -267,6 +299,7 @@ bus_container_instance_new (BusContext *context,
   self->context = bus_context_ref (context);
   self->containers = bus_containers_ref (containers);
   self->server = NULL;
+  self->creator = dbus_connection_ref (creator);
 
   if (containers->next_container_id >=
       DBUS_UINT64_CONSTANT (0xFFFFFFFFFFFFFFFF))
@@ -302,6 +335,16 @@ fail:
   return NULL;
 }
 
+static void
+bus_container_creator_data_free (BusContainerCreatorData *self)
+{
+  /* Each instance holds a ref to the creator, so there should be
+   * nothing here */
+  _dbus_assert (self->instances == NULL);
+
+  dbus_free (self);
+}
+
 /* We only accept EXTERNAL authentication, because Unix platforms that are
  * sufficiently capable to have app-containers ought to have it. */
 static const char * const auth_mechanisms[] =
@@ -327,6 +370,19 @@ allow_same_uid_only (DBusConnection *connection,
 }
 
 static void
+bus_container_instance_lost_connection (BusContainerInstance *instance,
+                                        DBusConnection *connection)
+{
+  bus_container_instance_ref (instance);
+  dbus_connection_ref (connection);
+
+  dbus_connection_set_data (connection, contained_data_slot, NULL, NULL);
+
+  dbus_connection_unref (connection);
+  bus_container_instance_unref (instance);
+}
+
+static void
 new_connection_cb (DBusServer     *server,
                    DBusConnection *new_connection,
                    void           *data)
@@ -338,12 +394,18 @@ new_connection_cb (DBusServer     *server,
                                  (DBusFreeFunction) bus_container_instance_unref))
     {
       bus_container_instance_unref (instance);
+      bus_container_instance_lost_connection (instance, new_connection);
       return;
     }
 
-  /* If this fails it logs a warning, so we don't need to do that */
+  /* If this fails it logs a warning, so we don't need to do that.
+   * We don't know how to undo this, so do it last (apart from things that
+   * cannot fail) */
   if (!bus_context_add_incoming_connection (instance->context, new_connection))
-    return;
+    {
+      bus_container_instance_lost_connection (instance, new_connection);
+      return;
+    }
 
   /* We'd like to check the uid here, but we can't yet. Instead clear the
    * BusContext's unix_user_function, which results in us getting the
@@ -476,6 +538,7 @@ bus_containers_handle_add_server (DBusConnection *connection,
                                   DBusMessage    *message,
                                   DBusError      *error)
 {
+  BusContainerCreatorData *creator_data;
   DBusMessageIter iter;
   DBusMessageIter dict_iter;
   DBusMessageIter writer;
@@ -494,7 +557,29 @@ bus_containers_handle_add_server (DBusConnection *connection,
   context = bus_transaction_get_context (transaction);
   containers = bus_context_get_containers (context);
 
-  instance = bus_container_instance_new (context, containers, error);
+  creator_data = dbus_connection_get_data (connection,
+                                           container_creator_data_slot);
+
+  if (creator_data == NULL)
+    {
+      creator_data = dbus_new0 (BusContainerCreatorData, 1);
+
+      if (creator_data == NULL)
+        goto oom;
+
+      creator_data->instances = NULL;
+
+      if (!dbus_connection_set_data (connection, container_creator_data_slot,
+                                     creator_data,
+                                     (DBusFreeFunction) bus_container_creator_data_free))
+        {
+          bus_container_creator_data_free (creator_data);
+          goto oom;
+        }
+    }
+
+  instance = bus_container_instance_new (context, containers, connection,
+                                         error);
 
   if (instance == NULL)
     goto fail;
@@ -589,6 +674,9 @@ bus_containers_handle_add_server (DBusConnection *connection,
 
   if (!_dbus_hash_table_insert_string (containers->instances_by_path,
                                        instance->path, instance))
+    goto oom;
+
+  if (!_dbus_list_append (&creator_data->instances, instance))
     goto oom;
 
   /* This part is separated out because we eventually want to be able to
