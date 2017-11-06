@@ -176,8 +176,14 @@ new_connection_callback (DBusServer     *server,
                          DBusConnection *new_connection,
                          void           *data)
 {
-  BusContext *context = data;
+  /* If this fails it logs a warning, so we don't need to do that */
+  bus_context_add_incoming_connection (data, new_connection);
+}
 
+dbus_bool_t
+bus_context_add_incoming_connection (BusContext *context,
+                                     DBusConnection *new_connection)
+{
   /* If this fails it logs a warning, so we don't need to do that */
   if (!bus_connections_setup_connection (context->connections, new_connection))
     {
@@ -187,6 +193,8 @@ new_connection_callback (DBusServer     *server,
        * in general.
        */
       dbus_connection_close (new_connection);
+      /* on OOM, we won't have ref'd the connection so it will die. */
+      return FALSE;
     }
 
   dbus_connection_set_max_received_size (new_connection,
@@ -204,7 +212,7 @@ new_connection_callback (DBusServer     *server,
   dbus_connection_set_allow_anonymous (new_connection,
                                        context->allow_anonymous);
 
-  /* on OOM, we won't have ref'd the connection so it will die. */
+  return TRUE;
 }
 
 static void

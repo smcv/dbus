@@ -150,6 +150,8 @@ void              bus_context_check_all_watches                  (BusContext    
 dbus_bool_t       bus_context_setup_server                       (BusContext       *context,
                                                                   DBusServer       *server,
                                                                   DBusError        *error);
+dbus_bool_t       bus_context_add_incoming_connection            (BusContext       *context,
+                                                                  DBusConnection   *new_connection);
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
 void              bus_context_quiet_log_begin                    (BusContext *context);
