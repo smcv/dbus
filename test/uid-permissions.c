@@ -93,7 +93,6 @@ test_uae (Fixture *f,
   const Config *config = context;
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
 
@@ -114,19 +113,8 @@ test_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (config->expect_success)
     {
@@ -143,7 +131,6 @@ test_uae (Fixture *f,
       g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
     }
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 }
@@ -155,7 +142,6 @@ test_monitor (Fixture *f,
   const Config *config = context;
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   dbus_uint32_t no_flags = 0;
@@ -179,19 +165,8 @@ test_monitor (Fixture *f,
         DBUS_TYPE_UINT32, &no_flags))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (config->expect_success)
     {
@@ -208,7 +183,6 @@ test_monitor (Fixture *f,
       g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
     }
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 }

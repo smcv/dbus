@@ -333,6 +333,8 @@ test_no_reply (Fixture *f,
   if (m == NULL)
     g_error ("OOM");
 
+  /* Not using test_main_context_call_and_wait() here because we need to
+   * do things with the right connection as a side-effect */
   if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
                                         DBUS_TIMEOUT_INFINITE) ||
       pc == NULL)
@@ -386,7 +388,6 @@ test_creds (Fixture *f,
   DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials");
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   DBusMessageIter pair_iter;
@@ -406,19 +407,8 @@ test_creds (Fixture *f,
         DBUS_TYPE_INVALID))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   g_assert_cmpstr (dbus_message_get_signature (reply), ==, "a{sv}");
 
@@ -536,7 +526,6 @@ test_creds (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -547,7 +536,6 @@ test_processid (Fixture *f,
   DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixProcessID");
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc;
   DBusError error = DBUS_ERROR_INIT;
   guint32 pid;
 
@@ -559,19 +547,8 @@ test_processid (Fixture *f,
         DBUS_TYPE_INVALID))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (dbus_set_error_from_message (&error, reply))
     {
@@ -608,7 +585,6 @@ test_processid (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -618,7 +594,6 @@ test_canonical_path_uae (Fixture *f,
   DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "UpdateActivationEnvironment");
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
 
@@ -633,19 +608,8 @@ test_canonical_path_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   /* it succeeds */
   g_assert_cmpint (dbus_message_get_type (reply), ==,
@@ -653,7 +617,6 @@ test_canonical_path_uae (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 
   /* Now try with the wrong object path */
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
@@ -670,19 +633,8 @@ test_canonical_path_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   /* it fails, yielding an error message with one string argument */
   g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
@@ -692,7 +644,6 @@ test_canonical_path_uae (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1193,7 +1144,6 @@ test_peer_get_machine_id (Fixture *f,
   const char *what_daemon_thinks;
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
 
   if (f->skip)
@@ -1223,20 +1173,11 @@ test_peer_get_machine_id (Fixture *f,
                                     DBUS_INTERFACE_PEER,
                                     "GetMachineId");
 
-  if (m == NULL ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  if (m == NULL)
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_message_get_args (reply, &error,
         DBUS_TYPE_STRING, &what_daemon_thinks,
@@ -1249,7 +1190,6 @@ test_peer_get_machine_id (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
   dbus_free (what_i_think);
 }
 
@@ -1259,7 +1199,6 @@ test_peer_ping (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
 
   if (f->skip)
@@ -1268,27 +1207,17 @@ test_peer_ping (Fixture *f,
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_PEER, "Ping");
 
-  if (m == NULL ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  if (m == NULL)
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_message_get_args (reply, &error, DBUS_TYPE_INVALID))
     g_error ("%s: %s", error.name, error.message);
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1297,7 +1226,6 @@ test_get_invalid_path (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Interfaces";
@@ -1312,20 +1240,11 @@ test_get_invalid_path (Fixture *f,
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &property,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1336,7 +1255,6 @@ test_get_invalid_path (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1345,7 +1263,6 @@ test_get_invalid_iface (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
   const char *property = "Whatever";
@@ -1360,20 +1277,11 @@ test_get_invalid_iface (Fixture *f,
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &property,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1383,7 +1291,6 @@ test_get_invalid_iface (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1392,7 +1299,6 @@ test_get_invalid (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Whatever";
@@ -1407,20 +1313,11 @@ test_get_invalid (Fixture *f,
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &property,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1430,7 +1327,6 @@ test_get_invalid (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1439,7 +1335,6 @@ test_get_all_invalid_iface (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
 
@@ -1452,20 +1347,11 @@ test_get_all_invalid_iface (Fixture *f,
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1475,7 +1361,6 @@ test_get_all_invalid_iface (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1484,7 +1369,6 @@ test_get_all_invalid_path (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
 
@@ -1497,20 +1381,11 @@ test_get_all_invalid_path (Fixture *f,
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1521,7 +1396,6 @@ test_get_all_invalid_path (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1530,7 +1404,6 @@ test_set_invalid_iface (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
   const char *property = "Whatever";
@@ -1556,20 +1429,11 @@ test_set_invalid_iface (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1579,7 +1443,6 @@ test_set_invalid_iface (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1588,7 +1451,6 @@ test_set_invalid_path (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Interfaces";
@@ -1614,20 +1476,11 @@ test_set_invalid_path (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1637,7 +1490,6 @@ test_set_invalid_path (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1646,7 +1498,6 @@ test_set_invalid (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Whatever";
@@ -1672,20 +1523,11 @@ test_set_invalid (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1695,7 +1537,6 @@ test_set_invalid (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1704,7 +1545,6 @@ test_set (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Features";
@@ -1730,20 +1570,11 @@ test_set (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
@@ -1753,7 +1584,6 @@ test_set (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1800,7 +1630,6 @@ test_features (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter var_iter;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1816,20 +1645,11 @@ test_features (Fixture *f,
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &features,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_message_iter_init (reply, &args_iter))
     g_error ("Reply has no arguments");
@@ -1845,7 +1665,6 @@ test_features (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1907,7 +1726,6 @@ test_interfaces (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter var_iter;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1923,20 +1741,11 @@ test_interfaces (Fixture *f,
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &ifaces,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (!dbus_message_iter_init (reply, &args_iter))
     g_error ("Reply has no arguments");
@@ -1952,7 +1761,6 @@ test_interfaces (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1961,7 +1769,6 @@ test_get_all (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   DBusMessageIter pair_iter;
@@ -1979,20 +1786,11 @@ test_get_all (Fixture *f,
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   dbus_message_iter_init (reply, &args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
@@ -2036,7 +1834,6 @@ test_get_all (Fixture *f,
 
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void

@@ -499,7 +499,6 @@ become_monitor (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc;
   dbus_bool_t ok;
   DBusMessageIter appender, array_appender;
   const char * const *match_rules;
@@ -539,26 +538,14 @@ become_monitor (Fixture *f,
       !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   ok = dbus_message_get_args (reply, &f->e,
       DBUS_TYPE_INVALID);
   test_assert_no_error (&f->e);
   g_assert (ok);
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 }
@@ -572,7 +559,6 @@ test_invalid (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   dbus_bool_t ok;
   DBusMessageIter appender, array_appender;
   dbus_uint32_t zero = 0;
@@ -603,25 +589,13 @@ test_invalid (Fixture *f,
         &invalid_flags))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
   g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_INVALID_ARGS);
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
@@ -644,25 +618,13 @@ test_invalid (Fixture *f,
       !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
   g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_UNKNOWN_INTERFACE);
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
@@ -689,26 +651,16 @@ test_invalid (Fixture *f,
   if (!dbus_message_iter_append_basic (&array_appender, DBUS_TYPE_STRING,
         &s) ||
       !dbus_message_iter_close_container (&appender, &array_appender) ||
-      !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero) ||
-      !dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
+    test_oom ();
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
   g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_MATCH_RULE_INVALID);
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
@@ -720,19 +672,8 @@ test_invalid (Fixture *f,
   if (m == NULL)
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (dbus_set_error_from_message (&f->e, reply))
     g_error ("%s: %s", f->e.name, f->e.message);
@@ -745,7 +686,6 @@ test_invalid (Fixture *f,
   g_assert_cmpstr (s, !=, NULL);
   g_assert_cmpstr (s, !=, "");
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 }

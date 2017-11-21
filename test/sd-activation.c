@@ -524,7 +524,6 @@ test_uae (Fixture *f,
 {
   DBusMessage *m = NULL;
   DBusMessage *reply = NULL;
-  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter, arr_iter, entry_iter;
   const char *s;
 
@@ -545,22 +544,11 @@ test_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->caller, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
@@ -630,22 +618,11 @@ test_uae (Fixture *f,
       g_error ("OOM");
   }
 
-  if (!dbus_connection_send_with_reply (f->caller, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-    g_error ("OOM");
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &reply);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &reply, NULL))
-    g_error ("OOM");
-
-  while (reply == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
-  dbus_clear_pending_call (&pc);
   dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
@@ -876,26 +853,15 @@ test_transient_services (Fixture *f,
       m = dbus_message_new_method_call (config->bus_name,
                                         "/foo", "com.example.bar", "Activate");
 
-      if (m == NULL ||
-          !dbus_connection_send_with_reply (f->caller, m, &pc,
-            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-        g_error ("OOM");
+      if (m == NULL)
+        test_oom ();
 
       /* It fails. */
-
-      if (dbus_pending_call_get_completed (pc))
-        test_pending_call_store_reply (pc, &reply);
-      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-            &reply, NULL))
-        g_error ("OOM");
-
-      while (reply == NULL)
-        test_main_context_iterate (f->ctx, TRUE);
-
+      reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+          DBUS_TIMEOUT_USE_DEFAULT);
       assert_error_reply (reply, DBUS_SERVICE_DBUS, f->caller_name,
           DBUS_ERROR_SERVICE_UNKNOWN);
 
-      dbus_clear_pending_call (&pc);
       dbus_clear_message (&reply);
       dbus_clear_message (&m);
 
@@ -909,23 +875,13 @@ test_transient_services (Fixture *f,
       m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
                                         DBUS_INTERFACE_DBUS, "ReloadConfig");
 
-      if (m == NULL ||
-          !dbus_connection_send_with_reply (f->caller, m, &pc,
-            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-        g_error ("OOM");
+      if (m == NULL)
+        test_oom ();
 
-      if (dbus_pending_call_get_completed (pc))
-        test_pending_call_store_reply (pc, &reply);
-      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-            &reply, NULL))
-        g_error ("OOM");
-
-      while (reply == NULL)
-        test_main_context_iterate (f->ctx, TRUE);
-
+      reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+          DBUS_TIMEOUT_USE_DEFAULT);
       assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
-      dbus_clear_pending_call (&pc);
       dbus_clear_message (&reply);
       dbus_clear_message (&m);
     }
