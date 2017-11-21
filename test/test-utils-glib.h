@@ -99,6 +99,13 @@ void test_mkdir (const gchar *path, gint mode);
 
 void test_timeout_reset (void);
 
+void test_oom (void) _DBUS_GNUC_NORETURN;
+
+DBusMessage *test_main_context_call_and_wait (TestMainContext *ctx,
+    DBusConnection *connection,
+    DBusMessage *call,
+    int timeout);
+
 #if !GLIB_CHECK_VERSION(2, 44, 0)
 #define g_steal_pointer(x) backported_g_steal_pointer (x)
 /* A simplified version of g_steal_pointer without type-safety. */

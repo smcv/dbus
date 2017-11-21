@@ -554,7 +554,7 @@ test_simple (void)
 }
 
 static void
-test_oom (void)
+test_oom_handling (void)
 {
   if (!_dbus_test_oom_handling ("DBusVariant", test_once, NULL))
     g_error ("Test failed");
@@ -567,7 +567,7 @@ main (int argc,
   test_init (&argc, &argv);
 
   g_test_add_func ("/variant/simple", test_simple);
-  g_test_add_func ("/variant/oom", test_oom);
+  g_test_add_func ("/variant/oom", test_oom_handling);
 
   return g_test_run ();
 }

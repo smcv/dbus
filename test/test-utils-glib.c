@@ -714,3 +714,39 @@ test_mkdir (const gchar *path,
                g_strerror (saved_errno));
     }
 }
+
+void
+test_oom (void)
+{
+  g_error ("Out of memory");
+}
+
+/*
+ * Send the given method call and wait for a reply, spinning the main
+ * context as necessary.
+ */
+DBusMessage *
+test_main_context_call_and_wait (TestMainContext *ctx,
+    DBusConnection *connection,
+    DBusMessage *call,
+    int timeout)
+{
+  DBusPendingCall *pc = NULL;
+  DBusMessage *reply = NULL;
+
+  if (!dbus_connection_send_with_reply (connection, call, &pc, timeout) ||
+      pc == NULL)
+    test_oom ();
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &reply);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+        &reply, NULL))
+    test_oom ();
+
+  while (reply == NULL)
+    test_main_context_iterate (ctx, TRUE);
+
+  dbus_clear_pending_call (&pc);
+  return g_steal_pointer (&reply);
+}
