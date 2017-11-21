@@ -561,9 +561,9 @@ test_uae (Fixture *f,
     test_main_context_iterate (f->ctx, TRUE);
 
   assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
-  dbus_message_unref (m);
 
   dbus_clear_pending_call (&pc);
+  dbus_clear_message (&m);
 
   /* The fake systemd connects to the bus. */
   f->systemd = test_connect_to_bus (f->ctx, f->address);
@@ -595,7 +595,7 @@ test_uae (Fixture *f,
   dbus_message_iter_next (&args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
       DBUS_TYPE_INVALID);
-  dbus_message_unref (m);
+  dbus_clear_message (&m);
 
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
       DBUS_INTERFACE_DBUS, "UpdateActivationEnvironment");
@@ -648,9 +648,9 @@ test_uae (Fixture *f,
     test_main_context_iterate (f->ctx, TRUE);
 
   assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
-  dbus_message_unref (m);
 
   dbus_clear_pending_call (&pc);
+  dbus_clear_message (&m);
 
   while (f->systemd_message == NULL)
     test_main_context_iterate (f->ctx, TRUE);
@@ -684,7 +684,7 @@ test_uae (Fixture *f,
   dbus_message_iter_next (&args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
       DBUS_TYPE_INVALID);
-  dbus_message_unref (m);
+  dbus_clear_message (&m);
 }
 
 static void
@@ -902,8 +902,7 @@ test_transient_services (Fixture *f,
           DBUS_ERROR_SERVICE_UNKNOWN);
 
       dbus_clear_pending_call (&pc);
-      dbus_message_unref (m);
-      m = NULL;
+      dbus_clear_message (&m);
 
       /* Now generate a transient D-Bus service file for it. The directory
        * should have been created during dbus-daemon startup, so we don't have to
@@ -933,10 +932,9 @@ test_transient_services (Fixture *f,
         test_main_context_iterate (f->ctx, TRUE);
 
       assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
-      dbus_message_unref (m);
-      m = NULL;
 
       dbus_clear_pending_call (&pc);
+      dbus_clear_message (&m);
     }
 
   /* The service is present now. */
@@ -948,8 +946,7 @@ test_transient_services (Fixture *f,
         DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&m);
 
   if (dbus_pending_call_get_completed (pc))
     test_pending_call_store_reply (pc, &reply);
@@ -968,8 +965,7 @@ test_transient_services (Fixture *f,
   assert_signal (m, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
       "org.freedesktop.systemd1.Activator", "ActivationRequest", "s",
       "org.freedesktop.systemd1");
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&m);
 
   /* The activatable service connects and gets its name. */
   f->activated = test_connect_to_bus (f->ctx, f->address);
@@ -996,18 +992,15 @@ test_transient_services (Fixture *f,
       !dbus_connection_send (f->activated, send_reply, NULL))
     g_error ("OOM");
 
-  dbus_message_unref (send_reply);
-  send_reply = NULL;
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&send_reply);
+  dbus_clear_message (&m);
 
   /* The caller receives the reply. */
   while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
   assert_method_reply (reply, f->activated_name, f->caller_name, "");
-  dbus_message_unref (reply);
-  reply = NULL;
+  dbus_clear_message (&reply);
 }
 
 static void
