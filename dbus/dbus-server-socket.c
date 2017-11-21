@@ -295,17 +295,17 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
 
   socket_server = dbus_new0 (DBusServerSocket, 1);
   if (socket_server == NULL)
-    goto failed_0;
+    goto failed;
 
   socket_server->noncefile = noncefile;
 
   socket_server->fds = dbus_new (DBusSocket, n_fds);
   if (!socket_server->fds)
-    goto failed_0;
+    goto failed;
 
   socket_server->watch = dbus_new0 (DBusWatch *, n_fds);
   if (!socket_server->watch)
-    goto failed_1;
+    goto failed;
 
   for (i = 0 ; i < n_fds ; i++)
     {
@@ -317,7 +317,7 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
                                socket_handle_watch, socket_server,
                                NULL);
       if (watch == NULL)
-        goto failed_2;
+        goto failed;
 
       socket_server->n_fds++;
       socket_server->fds[i] = fds[i];
@@ -327,7 +327,7 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
   if (!_dbus_server_init_base (&socket_server->base,
                                &socket_vtable, address,
                                error))
-    goto failed_2;
+    goto failed;
 
   server = (DBusServer*)socket_server;
 
@@ -359,7 +359,7 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
           _dbus_server_disconnect_unlocked (server);
           SERVER_UNLOCK (server);
           _dbus_server_finalize_base (&socket_server->base);
-          goto failed_2;
+          goto failed;
         }
     }
 
@@ -368,23 +368,26 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
   _dbus_server_trace_ref (&socket_server->base, 0, 1, "new_for_socket");
   return (DBusServer*) socket_server;
 
- failed_2:
-  for (i = 0 ; i < n_fds ; i++)
+failed:
+  if (socket_server != NULL)
     {
-      if (socket_server->watch[i] != NULL)
+      if (socket_server->watch != NULL)
         {
-          _dbus_watch_invalidate (socket_server->watch[i]);
-          _dbus_watch_unref (socket_server->watch[i]);
-          socket_server->watch[i] = NULL;
+          for (i = 0; i < n_fds; i++)
+            {
+              if (socket_server->watch[i] != NULL)
+                {
+                  _dbus_watch_invalidate (socket_server->watch[i]);
+                  _dbus_watch_unref (socket_server->watch[i]);
+                  socket_server->watch[i] = NULL;
+                }
+            }
         }
+
+      dbus_free (socket_server->watch);
+      dbus_free (socket_server->fds);
+      dbus_free (socket_server);
     }
-  dbus_free (socket_server->watch);
-
- failed_1:
-  dbus_free (socket_server->fds);
-
- failed_0:
-  dbus_free (socket_server);
 
   if (error != NULL && !dbus_error_is_set (error))
     _DBUS_SET_OOM (error);
