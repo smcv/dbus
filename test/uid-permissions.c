@@ -91,8 +91,9 @@ test_uae (Fixture *f,
     gconstpointer context)
 {
   const Config *config = context;
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
+  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
 
@@ -118,35 +119,33 @@ test_uae (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
+                                          &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
   if (config->expect_success)
     {
       /* it succeeds */
-      g_assert_cmpint (dbus_message_get_type (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==,
           DBUS_MESSAGE_TYPE_METHOD_RETURN);
     }
   else
     {
       /* it fails, yielding an error message with one string argument */
-      g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-      g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
           DBUS_ERROR_ACCESS_DENIED);
-      g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+      g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
     }
 
   dbus_clear_pending_call (&pc);
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 static void
@@ -154,8 +153,9 @@ test_monitor (Fixture *f,
     gconstpointer context)
 {
   const Config *config = context;
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
+  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   dbus_uint32_t no_flags = 0;
@@ -184,35 +184,33 @@ test_monitor (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
+                                          &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
   if (config->expect_success)
     {
       /* it succeeds */
-      g_assert_cmpint (dbus_message_get_type (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==,
           DBUS_MESSAGE_TYPE_METHOD_RETURN);
     }
   else
     {
       /* it fails, yielding an error message with one string argument */
-      g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-      g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
           DBUS_ERROR_ACCESS_DENIED);
-      g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+      g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
     }
 
   dbus_clear_pending_call (&pc);
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 static void

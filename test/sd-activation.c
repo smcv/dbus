@@ -522,8 +522,9 @@ static void
 test_uae (Fixture *f,
     gconstpointer context)
 {
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
+  DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter, arr_iter, entry_iter;
   const char *s;
 
@@ -548,21 +549,19 @@ test_uae (Fixture *f,
         DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
+  assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
   dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
   /* The fake systemd connects to the bus. */
@@ -635,21 +634,19 @@ test_uae (Fixture *f,
         DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
+  assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
   dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
 
   while (f->systemd_message == NULL)
@@ -884,24 +881,22 @@ test_transient_services (Fixture *f,
             DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
         g_error ("OOM");
 
-      dbus_message_unref (m);
-      m = NULL;
-
       /* It fails. */
 
       if (dbus_pending_call_get_completed (pc))
-        test_pending_call_store_reply (pc, &m);
+        test_pending_call_store_reply (pc, &reply);
       else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-            &m, NULL))
+            &reply, NULL))
         g_error ("OOM");
 
-      while (m == NULL)
+      while (reply == NULL)
         test_main_context_iterate (f->ctx, TRUE);
 
-      assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
+      assert_error_reply (reply, DBUS_SERVICE_DBUS, f->caller_name,
           DBUS_ERROR_SERVICE_UNKNOWN);
 
       dbus_clear_pending_call (&pc);
+      dbus_clear_message (&reply);
       dbus_clear_message (&m);
 
       /* Now generate a transient D-Bus service file for it. The directory
@@ -919,21 +914,19 @@ test_transient_services (Fixture *f,
             DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
         g_error ("OOM");
 
-      dbus_message_unref (m);
-      m = NULL;
-
       if (dbus_pending_call_get_completed (pc))
-        test_pending_call_store_reply (pc, &m);
+        test_pending_call_store_reply (pc, &reply);
       else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-            &m, NULL))
+            &reply, NULL))
         g_error ("OOM");
 
-      while (m == NULL)
+      while (reply == NULL)
         test_main_context_iterate (f->ctx, TRUE);
 
-      assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
+      assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
       dbus_clear_pending_call (&pc);
+      dbus_clear_message (&reply);
       dbus_clear_message (&m);
     }
 

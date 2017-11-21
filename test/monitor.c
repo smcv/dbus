@@ -497,7 +497,8 @@ static void
 become_monitor (Fixture *f,
     const Config *config)
 {
-  DBusMessage *m;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusPendingCall *pc;
   dbus_bool_t ok;
   DBusMessageIter appender, array_appender;
@@ -543,26 +544,23 @@ become_monitor (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  ok = dbus_message_get_args (m, &f->e,
+  ok = dbus_message_get_args (reply, &f->e,
       DBUS_TYPE_INVALID);
   test_assert_no_error (&f->e);
   g_assert (ok);
 
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 /*
@@ -572,8 +570,9 @@ static void
 test_invalid (Fixture *f,
     gconstpointer context)
 {
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
+  DBusPendingCall *pc = NULL;
   dbus_bool_t ok;
   DBusMessageIter appender, array_appender;
   dbus_uint32_t zero = 0;
@@ -609,27 +608,25 @@ test_invalid (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_INVALID_ARGS);
+
+  dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* Try to become a monitor but use the wrong object path - not allowed
    * (security hardening against inappropriate XML policy rules) */
-
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
 
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       "/", DBUS_INTERFACE_MONITORING, "BecomeMonitor");
@@ -652,27 +649,25 @@ test_invalid (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_UNKNOWN_INTERFACE);
+
+  dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* Try to become a monitor but specify a bad match rule -
    * also not allowed */
-
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
 
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_MONITORING, "BecomeMonitor");
@@ -700,28 +695,25 @@ test_invalid (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_MATCH_RULE_INVALID);
 
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
+  dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* We did not become a monitor, so we can still call methods. */
 
-  pc = NULL;
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetId");
 
@@ -733,22 +725,19 @@ test_invalid (Fixture *f,
       pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
-
   if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
+    test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
+        &reply, NULL))
     g_error ("OOM");
 
-  while (m == NULL)
+  while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
-  if (dbus_set_error_from_message (&f->e, m))
+  if (dbus_set_error_from_message (&f->e, reply))
     g_error ("%s: %s", f->e.name, f->e.message);
 
-  ok = dbus_message_get_args (m, &f->e,
+  ok = dbus_message_get_args (reply, &f->e,
       DBUS_TYPE_STRING, &s,
       DBUS_TYPE_INVALID);
   test_assert_no_error (&f->e);
@@ -756,8 +745,9 @@ test_invalid (Fixture *f,
   g_assert_cmpstr (s, !=, NULL);
   g_assert_cmpstr (s, !=, "");
 
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
+  dbus_clear_pending_call (&pc);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 /*
