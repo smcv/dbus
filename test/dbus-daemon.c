@@ -1296,8 +1296,7 @@ static void
 test_get_invalid_path (Fixture *f,
                        gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      "/", DBUS_INTERFACE_PROPERTIES, "Get");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1305,6 +1304,9 @@ test_get_invalid_path (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, "/",
+      DBUS_INTERFACE_PROPERTIES, "Get");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1342,8 +1344,7 @@ static void
 test_get_invalid_iface (Fixture *f,
                         gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
@@ -1351,6 +1352,9 @@ test_get_invalid_iface (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1387,8 +1391,7 @@ static void
 test_get_invalid (Fixture *f,
                   gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1396,6 +1399,9 @@ test_get_invalid (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1432,14 +1438,16 @@ static void
 test_get_all_invalid_iface (Fixture *f,
                             gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1475,14 +1483,16 @@ static void
 test_get_all_invalid_path (Fixture *f,
                            gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      "/", DBUS_INTERFACE_PROPERTIES, "GetAll");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      "/", DBUS_INTERFACE_PROPERTIES, "GetAll");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1519,8 +1529,7 @@ static void
 test_set_invalid_iface (Fixture *f,
                         gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
@@ -1531,6 +1540,9 @@ test_set_invalid_iface (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1575,8 +1587,7 @@ static void
 test_set_invalid_path (Fixture *f,
                        gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      "/", DBUS_INTERFACE_PROPERTIES, "Set");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1587,6 +1598,9 @@ test_set_invalid_path (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      "/", DBUS_INTERFACE_PROPERTIES, "Set");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1631,8 +1645,7 @@ static void
 test_set_invalid (Fixture *f,
                   gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1643,6 +1656,9 @@ test_set_invalid (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1687,8 +1703,7 @@ static void
 test_set (Fixture *f,
           gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1699,6 +1714,9 @@ test_set (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1781,8 +1799,7 @@ static void
 test_features (Fixture *f,
                gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter var_iter;
@@ -1791,6 +1808,9 @@ test_features (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1886,8 +1906,7 @@ static void
 test_interfaces (Fixture *f,
                  gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter var_iter;
@@ -1896,6 +1915,9 @@ test_interfaces (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1938,8 +1960,7 @@ static void
 test_get_all (Fixture *f,
               gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
@@ -1951,6 +1972,9 @@ test_get_all (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
