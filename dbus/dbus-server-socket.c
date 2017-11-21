@@ -482,8 +482,10 @@ _dbus_server_new_for_tcp_socket (const char     *host,
 
   if (use_nonce)
     {
-      if (!_dbus_noncefile_create (&noncefile, error) ||
-          !_dbus_string_append (&address, ",noncefile=") ||
+      if (!_dbus_noncefile_create (&noncefile, error))
+        goto failed_2;
+
+      if (!_dbus_string_append (&address, ",noncefile=") ||
           !_dbus_address_append_escaped (&address, _dbus_noncefile_get_path (noncefile)))
         {
           dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
