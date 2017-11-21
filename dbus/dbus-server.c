@@ -764,6 +764,20 @@ dbus_server_unref (DBusServer *server)
     }
 }
 
+void
+_dbus_server_disconnect_unlocked (DBusServer *server)
+{
+  _dbus_assert (server->vtable->disconnect != NULL);
+
+  if (!server->disconnected)
+    {
+      /* this has to be first so recursive calls to disconnect don't happen */
+      server->disconnected = TRUE;
+
+      (* server->vtable->disconnect) (server);
+    }
+}
+
 /**
  * Releases the server's address and stops listening for
  * new clients. If called more than once, only the first
@@ -780,15 +794,7 @@ dbus_server_disconnect (DBusServer *server)
   dbus_server_ref (server);
   SERVER_LOCK (server);
 
-  _dbus_assert (server->vtable->disconnect != NULL);
-
-  if (!server->disconnected)
-    {
-      /* this has to be first so recursive calls to disconnect don't happen */
-      server->disconnected = TRUE;
-      
-      (* server->vtable->disconnect) (server);
-    }
+  _dbus_server_disconnect_unlocked (server);
 
   SERVER_UNLOCK (server);
   dbus_server_unref (server);

@@ -96,6 +96,7 @@ dbus_bool_t _dbus_server_init_base      (DBusServer             *server,
                                          const DBusString       *address,
                                          DBusError              *error);
 void        _dbus_server_finalize_base  (DBusServer             *server);
+void        _dbus_server_disconnect_unlocked (DBusServer        *server);
 dbus_bool_t _dbus_server_add_watch      (DBusServer             *server,
                                          DBusWatch              *watch);
 void        _dbus_server_remove_watch   (DBusServer             *server,

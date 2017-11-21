@@ -241,8 +241,11 @@ socket_disconnect (DBusServer *server)
           socket_server->watch[i] = NULL;
         }
 
-      _dbus_close_socket (socket_server->fds[i], NULL);
-      _dbus_socket_invalidate (&socket_server->fds[i]);
+      if (_dbus_socket_is_valid (socket_server->fds[i]))
+        {
+          _dbus_close_socket (socket_server->fds[i], NULL);
+          _dbus_socket_invalidate (&socket_server->fds[i]);
+        }
     }
 
   if (socket_server->socket_name != NULL)
@@ -336,10 +339,24 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
                                    socket_server->watch[i]))
         {
           int j;
-          for (j = 0 ; j < i ; j++)
-            _dbus_server_remove_watch (server,
-                                       socket_server->watch[j]);
 
+          /* The caller is still responsible for closing the fds until
+           * we return successfully, so don't let socket_disconnect()
+           * close them */
+          for (j = 0; j < n_fds; j++)
+            _dbus_socket_invalidate (&socket_server->fds[i]);
+
+          /* socket_disconnect() will try to remove all the watches;
+           * make sure it doesn't see the ones that weren't even added
+           * yet */
+          for (j = i; j < n_fds; j++)
+            {
+              _dbus_watch_invalidate (socket_server->watch[i]);
+              _dbus_watch_unref (socket_server->watch[i]);
+              socket_server->watch[i] = NULL;
+            }
+
+          _dbus_server_disconnect_unlocked (server);
           SERVER_UNLOCK (server);
           _dbus_server_finalize_base (&socket_server->base);
           goto failed_2;
