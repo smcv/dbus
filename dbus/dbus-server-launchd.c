@@ -68,7 +68,7 @@ _dbus_server_new_for_launchd (const char *launchd_env_var, DBusError * error)
 #ifdef DBUS_ENABLE_LAUNCHD
     DBusServer *server;
     DBusString address;
-    int launchd_fd;
+    int launchd_fd = -1;
     launch_data_t sockets_dict, checkin_response;
     launch_data_t checkin_request;
     launch_data_t listening_fd_array, listening_fd;
@@ -196,6 +196,9 @@ _dbus_server_new_for_launchd (const char *launchd_env_var, DBusError * error)
     return server;
 
   l_failed_0:
+    if (launchd_fd >= 0)
+      close (launchd_fd);
+
     _dbus_string_free (&address);
 
     return NULL;
