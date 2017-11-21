@@ -1258,8 +1258,7 @@ static void
 test_peer_ping (Fixture *f,
                 gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PEER, "Ping");
+  DBusMessage *m = NULL;
   DBusPendingCall *pc = NULL;
   DBusError error = DBUS_ERROR_INIT;
 
