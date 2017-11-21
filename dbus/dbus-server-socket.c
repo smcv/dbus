@@ -356,6 +356,7 @@ _dbus_server_new_for_socket (DBusSocket       *fds,
     {
       if (socket_server->watch[i] != NULL)
         {
+          _dbus_watch_invalidate (socket_server->watch[i]);
           _dbus_watch_unref (socket_server->watch[i]);
           socket_server->watch[i] = NULL;
         }
