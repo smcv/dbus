@@ -422,28 +422,26 @@ _dbus_server_new_for_tcp_socket (const char     *host,
                                  DBusError      *error,
                                  dbus_bool_t    use_nonce)
 {
-  DBusServer *server;
+  DBusServer *server = NULL;
   DBusSocket *listen_fds = NULL;
   int nlisten_fds = 0, i;
-  DBusString address;
-  DBusString host_str;
-  DBusString port_str;
+  DBusString address = _DBUS_STRING_INIT_INVALID;
+  DBusString host_str;    /* Initialized as const later, not freed */
+  DBusString port_str = _DBUS_STRING_INIT_INVALID;
   DBusNonceFile *noncefile = NULL;
   
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  noncefile = NULL;
-
   if (!_dbus_string_init (&address))
     {
       dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
-      return NULL;
+      goto failed;
     }
 
   if (!_dbus_string_init (&port_str))
     {
       dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
-      goto failed_0;
+      goto failed;
     }
 
   if (host == NULL)
@@ -463,7 +461,7 @@ _dbus_server_new_for_tcp_socket (const char     *host,
   if (nlisten_fds <= 0)
     {
       _DBUS_ASSERT_ERROR_IS_SET(error);
-      goto failed_1;
+      goto failed;
     }
 
   _dbus_string_init_const (&host_str, host);
@@ -473,32 +471,32 @@ _dbus_server_new_for_tcp_socket (const char     *host,
       !_dbus_string_append (&address, _dbus_string_get_const_data(&port_str)))
     {
       dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
-      goto failed_2;
+      goto failed;
     }
   if (family &&
       (!_dbus_string_append (&address, ",family=") ||
        !_dbus_string_append (&address, family)))
     {
       dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
-      goto failed_2;
+      goto failed;
     }
 
   if (use_nonce)
     {
       if (!_dbus_noncefile_create (&noncefile, error))
-        goto failed_2;
+        goto failed;
 
       if (!_dbus_string_append (&address, ",noncefile=") ||
           !_dbus_address_append_escaped (&address, _dbus_noncefile_get_path (noncefile)))
         {
           dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
-          goto failed_2;
+          goto failed;
         }
     }
 
   server = _dbus_server_new_for_socket (listen_fds, nlisten_fds, &address, noncefile, error);
   if (server == NULL)
-    goto failed_2;
+    goto failed;
 
   /* server has taken ownership of noncefile and the fds in listen_fds */
   _dbus_string_free (&port_str);
@@ -507,19 +505,18 @@ _dbus_server_new_for_tcp_socket (const char     *host,
 
   return server;
 
- failed_2:
+failed:
   _dbus_noncefile_delete (&noncefile, NULL);
 
-  for (i = 0 ; i < nlisten_fds ; i++)
-    _dbus_close_socket (listen_fds[i], NULL);
-  dbus_free(listen_fds);
+  if (listen_fds != NULL)
+    {
+      for (i = 0; i < nlisten_fds; i++)
+        _dbus_close_socket (listen_fds[i], NULL);
+      dbus_free (listen_fds);
+    }
 
- failed_1:
   _dbus_string_free (&port_str);
-
- failed_0:
   _dbus_string_free (&address);
-
   return NULL;
 }
 
