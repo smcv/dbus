@@ -301,6 +301,11 @@ do_noncefile_create (DBusNonceFile **noncefile_out,
     _dbus_assert (*noncefile_out == NULL);
 
     noncefile = dbus_new0 (DBusNonceFile, 1);
+    if (noncefile == NULL)
+      {
+        dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
+        return FALSE;
+      }
 
     /* Make it valid to "free" these even if _dbus_string_init() runs
      * out of memory: see comment in do_check_nonce() */
