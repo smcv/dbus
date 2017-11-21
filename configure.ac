@@ -1491,12 +1491,6 @@ fi
 
 AC_SUBST(DBUS_SYSTEM_PID_FILE)
 
-#### Directory to check for console ownership
-AS_IF([test -n "$with_console_auth_dir" && test "x$with_console_auth_dir" != xno],
-    [AC_DEFINE_UNQUOTED([DBUS_CONSOLE_AUTH_DIR], ["$with_console_auth_dir"],
-        [Directory to check for pam_console/pam_foreground flag files, or undefined])],
-    [with_console_auth_dir=])
-
 #### File to check for console ownership
 if test x$have_console_owner_file = xyes; then
    if ! test -z "$with_console_owner_file"; then

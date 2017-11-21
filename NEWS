@@ -19,6 +19,17 @@ Deprecations:
   org.freedesktop.Flatpak.SystemHelper are good examples of this
   approach.
 
+Features removed:
+
+• dbus-daemon on Unix no longer checks for flag files
+  /var/run/console/${username} created by the obsolete pam_console and
+  pam_foreground PAM modules when deciding whether to apply
+  <policy at_console="true"> policies to that user's connections.
+  This was deprecated in 1.11.18. The remaining implementations for
+  the deprecated <policy at_console="true"> feature are for Linux with
+  systemd (or a sufficiently close emulation), and for Solaris.
+  (fd.o #101629, Simon McVittie)
+
 Enhancements:
 
 • Improve automated test logging (fd.o #103601, Simon McVittie)

@@ -14,7 +14,6 @@
 */
 #cmakedefine HAVE_GNUC_VARARGS 1
 
-#cmakedefine DBUS_CONSOLE_AUTH_DIR "@DBUS_CONSOLE_AUTH_DIR@"
 #cmakedefine DBUS_DATADIR  "@DBUS_DATADIR@"
 #cmakedefine DBUS_BINDIR   "@DBUS_BINDIR@"
 #cmakedefine DBUS_PREFIX "@DBUS_PREFIX@"

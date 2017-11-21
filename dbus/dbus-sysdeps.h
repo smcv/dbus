@@ -541,9 +541,6 @@ dbus_bool_t _dbus_command_for_pid (unsigned long  pid,
                                    int            max_len,
                                    DBusError     *error);
 
-dbus_bool_t _dbus_user_at_console (const char *username,
-                                   DBusError  *error);
-
 typedef enum {
   DBUS_LOG_FLAGS_STDERR = (1 << 0),
   DBUS_LOG_FLAGS_SYSTEM_LOG = (1 << 1)

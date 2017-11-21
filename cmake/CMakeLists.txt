@@ -434,8 +434,6 @@ endif()
  # Not used on Windows, where there is no system bus
 set (DBUS_SYSTEM_PID_FILE ${DBUS_RUNSTATEDIR}/dbus/pid)
 
-set (DBUS_CONSOLE_AUTH_DIR "" CACHE STRING "Directory to check for pam_console/pam_foreground flag files, or empty to ignore")
-
 # This won't work on Windows. It's not meant to - the system bus is
 # meaningless on Windows anyway.
 #
@@ -606,13 +604,6 @@ message("        System bus socket:        ${DBUS_SYSTEM_SOCKET}               "
 message("        System bus PID file:      ${DBUS_SYSTEM_PID_FILE}             ")
 message("        System bus user:          ${DBUS_USER}                        ")
 message("        Session bus socket dir:   ${DBUS_SESSION_SOCKET_DIR}          ")
-
-if(DBUS_CONSOLE_AUTH_DIR)
-message("        pam_console auth dir:     ${DBUS_CONSOLE_AUTH_DIR}            ")
-else()
-message("        pam_console auth dir:     (none)                              ")
-endif()
-
 message("        'make check' socket dir:  ${TEST_SOCKET_DIR}                  ")
 endif()
 message("        Test listen address:      ${TEST_LISTEN}                      ")
