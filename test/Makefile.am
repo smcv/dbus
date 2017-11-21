@@ -105,6 +105,9 @@ test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_refs_SOURCES = internals/refs.c
 test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
+test_server_oom_SOURCES = internals/server-oom.c
+test_server_oom_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
 test_syslog_SOURCES = internals/syslog.c
 test_syslog_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
@@ -164,6 +167,7 @@ installable_tests += \
 	test-marshal \
 	test-refs \
 	test-relay \
+	test-server-oom \
 	test-syntax \
 	test-syslog \
 	test-uid-permissions \
