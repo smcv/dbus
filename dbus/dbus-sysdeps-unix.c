@@ -1581,11 +1581,9 @@ _dbus_listen_tcp_socket (const char     *host,
       newlisten_fd = dbus_realloc(listen_fd, sizeof(DBusSocket)*(nlisten_fd+1));
       if (!newlisten_fd)
         {
-          saved_errno = errno;
           _dbus_close (fd, NULL);
-          dbus_set_error (error, _dbus_error_from_errno (saved_errno),
-                          "Failed to allocate file handle array: %s",
-                          _dbus_strerror (saved_errno));
+          dbus_set_error (error, DBUS_ERROR_NO_MEMORY,
+                          "Failed to allocate file handle array");
           goto failed;
         }
       listen_fd = newlisten_fd;
