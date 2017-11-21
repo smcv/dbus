@@ -563,6 +563,8 @@ test_uae (Fixture *f,
   assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
   dbus_message_unref (m);
 
+  dbus_clear_pending_call (&pc);
+
   /* The fake systemd connects to the bus. */
   f->systemd = test_connect_to_bus (f->ctx, f->address);
   if (!dbus_connection_add_filter (f->systemd, systemd_filter, f, NULL))
@@ -647,6 +649,8 @@ test_uae (Fixture *f,
 
   assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
   dbus_message_unref (m);
+
+  dbus_clear_pending_call (&pc);
 
   while (f->systemd_message == NULL)
     test_main_context_iterate (f->ctx, TRUE);
@@ -897,6 +901,7 @@ test_transient_services (Fixture *f,
       assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
           DBUS_ERROR_SERVICE_UNKNOWN);
 
+      dbus_clear_pending_call (&pc);
       dbus_message_unref (m);
       m = NULL;
 
@@ -930,6 +935,8 @@ test_transient_services (Fixture *f,
       assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
       dbus_message_unref (m);
       m = NULL;
+
+      dbus_clear_pending_call (&pc);
     }
 
   /* The service is present now. */
@@ -949,6 +956,8 @@ test_transient_services (Fixture *f,
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
         &reply, NULL))
     g_error ("OOM");
+
+  dbus_clear_pending_call (&pc);
 
   /* The mock systemd is told to start the service. */
   while (f->systemd_message == NULL)

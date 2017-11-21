@@ -145,6 +145,7 @@ test_uae (Fixture *f,
       g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
     }
 
+  dbus_clear_pending_call (&pc);
   dbus_message_unref (m);
 }
 
@@ -210,6 +211,7 @@ test_monitor (Fixture *f,
       g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
     }
 
+  dbus_clear_pending_call (&pc);
   dbus_message_unref (m);
 }
 
