@@ -156,7 +156,8 @@ static void die (const char *message) _DBUS_GNUC_NORETURN;
 static void
 die (const char *message)
 {
-  fprintf (stderr, "*** %s", message);
+  printf ("Bail out! %s\n", message);
+  fflush (stdout);
   exit (1);
 }
 
