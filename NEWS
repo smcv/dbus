@@ -6,6 +6,19 @@ risk of regressions. OS distributions should stay with the 1.12.x branch,
 unless they can commit to following the 1.13.x branch until it reaches
 a 1.14.0 stable release at an unspecified point in the future.
 
+Deprecations:
+
+• <policy at_console="true"> has been discouraged for some time, and is
+  considered to be deprecated. Services requiring finer-grained access
+  control than "root only", "root or a designated system user only" or
+  "all users" should accept method calls from all users, then check
+  the method call's characteristics against a configurable or hard-coded
+  policy to choose whether to obey it or reject it. polkit (formerly
+  PolicyKit) is a commonly-used way to apply configurable policies to
+  method calls. org.freedesktop.UDisks2 and
+  org.freedesktop.Flatpak.SystemHelper are good examples of this
+  approach.
+
 Enhancements:
 
 • Improve automated test logging (fd.o #103601, Simon McVittie)

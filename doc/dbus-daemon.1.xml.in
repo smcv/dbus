@@ -798,7 +798,7 @@ your service.</para>
 <para>The &lt;policy&gt; element has one of four attributes:</para>
 <literallayout remap='.nf'>
   context="(default|mandatory)"
-  at_console="(true|false)"
+  at_console="(true|false)" (deprecated)
   user="username or userid"
   group="group name or gid"
 </literallayout> <!-- .fi -->
