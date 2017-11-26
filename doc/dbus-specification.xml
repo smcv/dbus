@@ -1794,6 +1794,17 @@
         </para>
 
         <para>
+          If the author's DNS domain name contains hyphen/minus characters
+          ('-'), which are not allowed in D-Bus interface names, they
+          should be replaced by underscores. If the DNS domain name
+          contains a digit immediately following a period ('.'), which
+          is also not allowed in interface names), the interface name
+          should add an underscore before that digit. For example, if
+          the owner of 7-zip.org defined an interface for out-of-process
+          plugins, it might be named <literal>org._7_zip.Plugin</literal>.
+        </para>
+
+        <para>
           D-Bus does not distinguish between the concepts that would be
           called classes and interfaces in Java: either can be identified on
           D-Bus by an interface name.
@@ -1822,7 +1833,8 @@
                 </para>
             </listitem>
             <listitem><para>Each element must only contain the ASCII characters
-                "[A-Z][a-z][0-9]_-". Only elements that are part of a unique
+                "[A-Z][a-z][0-9]_-", with "-" discouraged in new bus
+                names. Only elements that are part of a unique
                 connection name may begin with a digit, elements in
                 other bus names must not begin with a digit.
                 </para>
@@ -1837,8 +1849,20 @@
           </itemizedlist>
         </para>
         <para>
-          Note that the hyphen ('-') character is allowed in bus names but
-          not in interface names.
+          Note that the hyphen ('-') character is allowed in bus names
+          but not in interface names. It is also problematic or not
+          allowed in various specifications and APIs that refer to
+          D-Bus, such as <ulink
+            url="http://docs.flatpak.org/en/latest/introduction.html#identifiers"
+            >Flatpak application IDs</ulink>,
+          <ulink
+            url="https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#dbus"
+            >the <literal>DBusActivatable</literal> interface in the
+            Desktop Entry Specification</ulink>, and the convention
+          that an application's "main" interface and object path
+          resemble its bus name. To avoid situations that require
+          special-case handling, it is recommended that new D-Bus names
+          consistently replace hyphens with underscores.
         </para>
 
         <para>
@@ -1851,6 +1875,15 @@
           number in well-known bus names is a good idea; it's possible to
           have the well-known bus name for more than one version
           simultaneously if backwards compatibility is required.
+        </para>
+
+        <para>
+          As with interface names, if the author's DNS domain name
+          contains hyphen/minus characters they should be replaced by
+          underscores, and if it contains leading digits they should be
+          escaped by prepending an underscore. For example, if the owner
+          of 7-zip.org used a D-Bus name for an archiving application,
+          it might be named <literal>org._7_zip.Archiver</literal>.
         </para>
 
         <para>
