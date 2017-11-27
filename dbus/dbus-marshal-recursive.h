@@ -111,6 +111,7 @@ DBUS_PRIVATE_EXPORT
 int         _dbus_type_reader_get_current_type          (const DBusTypeReader  *reader);
 DBUS_PRIVATE_EXPORT
 int         _dbus_type_reader_get_element_type          (const DBusTypeReader  *reader);
+DBUS_PRIVATE_EXPORT
 int         _dbus_type_reader_get_value_pos             (const DBusTypeReader  *reader);
 DBUS_PRIVATE_EXPORT
 void        _dbus_type_reader_read_basic                (const DBusTypeReader  *reader,

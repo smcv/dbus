@@ -161,6 +161,7 @@ installable_tests += \
 	test-dbus-daemon \
 	test-dbus-daemon-eavesdrop \
 	test-fdpass \
+	test-header-fields \
 	test-message \
 	test-monitor \
 	test-loopback \
@@ -314,6 +315,15 @@ test_dbus_daemon_LDADD = \
 test_dbus_daemon_eavesdrop_SOURCES = dbus-daemon-eavesdrop.c
 test_dbus_daemon_eavesdrop_LDADD = \
     libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+test_header_fields_SOURCES = \
+    header-fields.c \
+    $(NULL)
+test_header_fields_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
     $(GLIB_LIBS) \
     $(NULL)
 

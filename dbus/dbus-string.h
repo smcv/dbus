@@ -92,6 +92,7 @@ DBUS_PRIVATE_EXPORT
 void          _dbus_string_init_const_len        (DBusString        *str,
                                                   const char        *value,
                                                   int                len);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_init_preallocated     (DBusString        *str,
                                                   int                allocate_size);
 
@@ -112,6 +113,7 @@ char*         _dbus_string_get_data              (DBusString        *str);
 DBUS_PRIVATE_EXPORT
 const char*   _dbus_string_get_const_data        (const DBusString  *str);
 #endif /* _dbus_string_get_const_data */
+DBUS_PRIVATE_EXPORT
 char*         _dbus_string_get_data_len          (DBusString        *str,
                                                   int                start,
                                                   int                len);
@@ -226,6 +228,7 @@ dbus_bool_t   _dbus_string_insert_2_aligned      (DBusString        *str,
 dbus_bool_t   _dbus_string_insert_4_aligned      (DBusString        *str,
                                                   int                insert_at,
                                                   const unsigned char octets[4]);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_insert_8_aligned      (DBusString        *str,
                                                   int                insert_at,
                                                   const unsigned char octets[8]);

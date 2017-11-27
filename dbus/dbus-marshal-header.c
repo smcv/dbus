@@ -612,6 +612,9 @@ _dbus_header_create (DBusHeader  *header,
         goto oom;
     }
 
+  /* Note that test/message.c relies on this being in the middle of the
+   * message: if you change the order of serialization here (but why
+   * would you?), please find some other way to retain test coverage. */
   if (interface != NULL)
     {
       if (!write_basic_field (&array,
