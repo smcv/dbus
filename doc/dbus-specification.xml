@@ -2297,17 +2297,6 @@
         If authentication succeeds after exchanging DATA commands,
         an OK command must be sent to the client.
       </para>
-      <para>
-        The first octet received by the server after the \r\n of the BEGIN
-        command from the client must be the first octet of the
-        authenticated/encrypted stream of D-Bus messages.
-      </para>
-      <para>
-        If BEGIN is received by the server, the first octet received
-        by the client after the \r\n of the OK command must be the
-        first octet of the authenticated/encrypted stream of D-Bus
-        messages.
-      </para>
     </sect2>
     <sect2 id="auth-command-cancel">
       <title>CANCEL Command</title>
@@ -2334,13 +2323,21 @@
       <title>BEGIN Command</title>
       <para>
         The BEGIN command acknowledges that the client has received an
-        OK command from the server, and that the stream of messages
+        OK command from the server and completed any feature negotiation
+        that it wishes to do, and declares that the stream of messages
         is about to begin.
       </para>
       <para>
         The first octet received by the server after the \r\n of the BEGIN
         command from the client must be the first octet of the
         authenticated/encrypted stream of D-Bus messages.
+      </para>
+      <para>
+        Unlike all other commands, the server does not reply to
+        the BEGIN command with an authentication command of its own.
+        After the \r\n of the reply to the command before BEGIN,
+        the next octet received by the client must be the first octet
+        of the authenticated/encrypted stream of D-Bus messages.
       </para>
     </sect2>
     <sect2 id="auth-command-rejected">
@@ -2376,9 +2373,13 @@
         this protocol.
       </para>
       <para>
-        If a client sends BEGIN the first octet received by the client
+        If there is no negotiation, the first octet received by the client
         after the \r\n of the OK command must be the first octet of
-        the authenticated/encrypted stream of D-Bus messages.
+        the authenticated/encrypted stream of D-Bus messages. If the
+        client negotiates Unix file descriptor passing, the first
+        octet received by the client after the \r\n of the AGREE_UNIX_FD
+        or ERROR reply must be the first octet of the
+        authenticated/encrypted stream.
       </para>
       <para>
         The OK command has one argument, which is the GUID of the server.
