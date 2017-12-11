@@ -1592,14 +1592,14 @@
           by a field value. A header must contain the required header fields for
           its message type, and zero or more of any optional header
           fields. Future versions of this protocol specification may add new
-          fields. Implementations must ignore fields they do not
-          understand. Implementations must not invent their own header fields;
+          fields. Implementations must not invent their own header fields;
           only changes to this specification may introduce new header fields.
         </para>
 
         <para>
-          Again, if an implementation sees a header field code that it does not
-          expect, it must ignore that field, as it will be part of a new
+          If an implementation sees a header field code that it does not
+          expect, it must accept and ignore that field, as it will be part
+          of a new
           (but compatible) version of this specification. This also applies
           to known header fields appearing in unexpected messages, for
           example: if a signal has a reply serial it must be ignored
@@ -1611,6 +1611,14 @@
           with the wrong type stored in the field value. So for example a
           message with an <literal>INTERFACE</literal> field of type
           <literal>UINT32</literal> would be considered corrupt.
+        </para>
+
+        <para>
+          Server implementations that might relay messages from one
+          mutually-distrustful client to another, such as the message
+          bus, should remove header fields that the server does not
+          recognise. However, a client must assume that the server has
+          not done so, unless it has evidence to the contrary.
         </para>
 
         <para>
@@ -1646,6 +1654,7 @@
                     implementations should not send messages with this path,
                     and the reference implementation of the bus daemon will
                     disconnect any application that attempts to do so.
+                    This header field is controlled by the message sender.
                   </entry>
                 </row>
                 <row>
@@ -1663,6 +1672,7 @@
                     interface, and the reference implementation of the bus
                     daemon will disconnect any application that attempts to
                     do so.
+                    This header field is controlled by the message sender.
                   </entry>
                 </row>
                 <row>
@@ -1670,7 +1680,10 @@
                   <entry>3</entry>
                   <entry><literal>STRING</literal></entry>
                   <entry><literal>METHOD_CALL</literal>, <literal>SIGNAL</literal></entry>
-                  <entry>The member, either the method name or signal name.</entry>
+                  <entry>
+                    The member, either the method name or signal name.
+                    This header field is controlled by the message sender.
+                  </entry>
                 </row>
                 <row>
                   <entry><literal>ERROR_NAME</literal></entry>
@@ -1684,8 +1697,12 @@
                   <entry>5</entry>
                   <entry><literal>UINT32</literal></entry>
                   <entry><literal>ERROR</literal>, <literal>METHOD_RETURN</literal></entry>
-                  <entry>The serial number of the message this message is a reply
-                    to. (The serial number is the second <literal>UINT32</literal> in the header.)</entry>
+                  <entry>
+                    The serial number of the message this message is a reply
+                    to. (The serial number is the second <literal>UINT32</literal>
+                    in the header.)
+                    This header field is controlled by the message sender.
+                  </entry>
                 </row>
                 <row>
                   <entry><literal>DESTINATION</literal></entry>
@@ -1697,6 +1714,7 @@
                     This field is usually only meaningful in combination with
                     the message bus (see <xref linkend="message-bus"/>),
                     but other servers may define their own meanings for it.
+                    This header field is controlled by the message sender.
                   </entry>
                 </row>
                 <row>
@@ -1711,6 +1729,9 @@
                     On a message bus, this header field is controlled by
                     the message bus, so it is as reliable and trustworthy
                     as the message bus itself.
+                    Otherwise, this header field is controlled by the message
+                    sender, unless there is out-of-band information that
+                    indicates otherwise.
                   </entry>
                 </row>
                 <row>
@@ -1718,9 +1739,12 @@
                   <entry>8</entry>
                   <entry><literal>SIGNATURE</literal></entry>
                   <entry>optional</entry>
-                  <entry>The signature of the message body.
-                  If omitted, it is assumed to be the
-                  empty signature "" (i.e. the body must be 0-length).</entry>
+                  <entry>
+                    The signature of the message body.
+                    If omitted, it is assumed to be the
+                    empty signature "" (i.e. the body must be 0-length).
+                    This header field is controlled by the message sender.
+                  </entry>
                 </row>
                 <row>
                   <entry><literal>UNIX_FDS</literal></entry>
@@ -1736,7 +1760,9 @@
                   part of the message itself. They may not be sent
                   before the first byte of the message itself is
                   transferred or after the last byte of the message
-                  itself.</entry>
+                  itself.
+                  This header field is controlled by the message sender.
+                  </entry>
                 </row>
               </tbody>
             </tgroup>
