@@ -2728,8 +2728,19 @@
             <itemizedlist>
               <listitem>
                 <para>
-                  Receive OK &rarr; send BEGIN, terminate auth
-                  conversation, <emphasis>authenticated</emphasis>
+                  Receive OK &rarr; <emphasis>authenticated</emphasis>,
+                  choose one:
+
+                  <simplelist>
+                    <member>
+                      send NEGOTIATE_UNIX_FD, goto
+                      <emphasis>WaitingForAgreeUnixFD</emphasis>
+                    </member>
+
+                    <member>
+                      send BEGIN, terminate auth conversation
+                    </member>
+                  </simplelist>
                 </para>
               </listitem>
               <listitem>
@@ -2773,6 +2784,34 @@
                   Receive REJECTED [mechs] &rarr; send AUTH [next mech],
                   goto <emphasis>WaitingForData</emphasis> or
                   <emphasis>WaitingForOK</emphasis>
+                </para>
+              </listitem>
+
+              <listitem>
+                <para>
+                  Receive anything else &rarr; terminate auth
+                  conversation, disconnect
+                </para>
+              </listitem>
+            </itemizedlist>
+          </para>
+        </formalpara>
+
+        <formalpara>
+          <title><emphasis>WaitingForAgreeUnixFD</emphasis></title>
+          <para>
+            <itemizedlist>
+              <listitem>
+                <para>
+                  Receive AGREE_UNIX_FD &rarr; enable Unix fd passing,
+                  send BEGIN, terminate auth conversation
+                </para>
+              </listitem>
+
+              <listitem>
+                <para>
+                  Receive ERROR &rarr; disable Unix fd passing,
+                  send BEGIN, terminate auth conversation
                 </para>
               </listitem>
 
@@ -2960,6 +2999,13 @@
                 <para>
                   Receive BEGIN &rarr; terminate auth conversation,
                   client authenticated
+                </para>
+              </listitem>
+
+              <listitem>
+                <para>
+                  Receive NEGOTIATE_UNIX_FD &rarr; send AGREE_UNIX_FD
+                  or ERROR, goto <emphasis>WaitingForBegin</emphasis>
                 </para>
               </listitem>
 
