@@ -1692,9 +1692,12 @@
                   <entry>6</entry>
                   <entry><literal>STRING</literal></entry>
                   <entry>optional</entry>
-                  <entry>The name of the connection this message is intended for.
-                    Only used in combination with the message bus, see
-                    <xref linkend="message-bus"/>.</entry>
+                  <entry>
+                    The name of the connection this message is intended for.
+                    This field is usually only meaningful in combination with
+                    the message bus (see <xref linkend="message-bus"/>),
+                    but other servers may define their own meanings for it.
+                  </entry>
                 </row>
                 <row>
                   <entry><literal>SENDER</literal></entry>
@@ -1702,8 +1705,13 @@
                   <entry><literal>STRING</literal></entry>
                   <entry>optional</entry>
                   <entry>Unique name of the sending connection.
-                    The message bus fills in this field so it is reliable; the field is
-                    only meaningful in combination with the message bus.</entry>
+                    This field is usually only meaningful in combination with
+                    the message bus, but other servers may define their own
+                    meanings for it.
+                    On a message bus, this header field is controlled by
+                    the message bus, so it is as reliable and trustworthy
+                    as the message bus itself.
+                  </entry>
                 </row>
                 <row>
                   <entry><literal>SIGNATURE</literal></entry>
