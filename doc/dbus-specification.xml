@@ -2235,7 +2235,7 @@
           <listitem><para>REJECTED &lt;space-separated list of mechanism names&gt;</para></listitem>
           <listitem><para>OK &lt;GUID in hex&gt;</para></listitem>
           <listitem><para>DATA &lt;data in hex encoding&gt;</para></listitem>
-          <listitem><para>ERROR</para></listitem>
+          <listitem><para>ERROR [human-readable error explanation]</para></listitem>
           <listitem><para>AGREE_UNIX_FD</para></listitem>
         </itemizedlist>
       </para>
