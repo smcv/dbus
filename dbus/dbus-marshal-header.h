@@ -172,7 +172,6 @@ void          _dbus_header_byteswap               (DBusHeader        *header,
                                                    int                new_order);
 DBUS_PRIVATE_EXPORT
 char          _dbus_header_get_byte_order         (const DBusHeader  *header);
-
-
+dbus_bool_t   _dbus_header_remove_unknown_fields  (DBusHeader        *header);
 
 #endif /* DBUS_MARSHAL_HEADER_H */

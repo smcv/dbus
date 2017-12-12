@@ -263,6 +263,18 @@ void _dbus_message_get_unix_fds(DBusMessage *message,
 }
 
 /**
+ * Remove every header field not known to this version of dbus.
+ *
+ * @param message the message
+ * @returns #FALSE if no memory
+ */
+dbus_bool_t
+_dbus_message_remove_unknown_fields (DBusMessage *message)
+{
+  return _dbus_header_remove_unknown_fields (&message->header);
+}
+
+/**
  * Sets the serial number of a message.
  * This can only be done once on a message.
  *

@@ -64,6 +64,8 @@ void        _dbus_message_add_counter_link      (DBusMessage  *message,
                                                  DBusList     *link);
 void        _dbus_message_remove_counter        (DBusMessage  *message,
                                                  DBusCounter  *counter);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_message_remove_unknown_fields (DBusMessage  *message);
 
 DBUS_PRIVATE_EXPORT
 DBusMessageLoader* _dbus_message_loader_new                   (void);

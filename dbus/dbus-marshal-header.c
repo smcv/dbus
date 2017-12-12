@@ -1514,4 +1514,63 @@ _dbus_header_byteswap (DBusHeader *header,
   _dbus_string_set_byte (&header->data, BYTE_ORDER_OFFSET, new_order);
 }
 
+/**
+ * Remove every header field not known to this version of dbus.
+ *
+ * @param header the header
+ * @returns #FALSE if no memory
+ */
+dbus_bool_t
+_dbus_header_remove_unknown_fields (DBusHeader *header)
+{
+  DBusTypeReader array;
+  DBusTypeReader fields_reader;
+
+  _dbus_type_reader_init (&fields_reader,
+                          _dbus_header_get_byte_order (header),
+                          &_dbus_header_signature_str,
+                          FIELDS_ARRAY_SIGNATURE_OFFSET,
+                          &header->data,
+                          FIELDS_ARRAY_LENGTH_OFFSET);
+
+  _dbus_type_reader_recurse (&fields_reader, &array);
+
+  while (_dbus_type_reader_get_current_type (&array) != DBUS_TYPE_INVALID)
+    {
+      DBusTypeReader sub;
+      DBusTypeReader variant;
+      unsigned char field_code;
+
+      _dbus_type_reader_recurse (&array, &sub);
+
+      _dbus_assert (_dbus_type_reader_get_current_type (&sub) == DBUS_TYPE_BYTE);
+      _dbus_type_reader_read_basic (&sub, &field_code);
+
+      if (field_code > DBUS_HEADER_FIELD_LAST)
+        {
+          if (!reserve_header_padding (header))
+            return FALSE;
+
+          if (!_dbus_type_reader_delete (&array, &fields_reader))
+            return FALSE;
+
+          correct_header_padding (header);
+          _dbus_header_cache_invalidate_all (header);
+        }
+      else
+        {
+          _dbus_type_reader_next (&sub);
+        }
+
+      _dbus_assert (_dbus_type_reader_get_current_type (&sub) == DBUS_TYPE_VARIANT);
+      _dbus_type_reader_recurse (&sub, &variant);
+
+      _dbus_header_cache_one (header, field_code, &variant);
+
+      _dbus_type_reader_next (&array);
+    }
+
+  return TRUE;
+}
+
 /** @} */
