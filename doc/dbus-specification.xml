@@ -2523,11 +2523,12 @@
 
       <para>
         <figure>
-          <title>Example of successful magic cookie authentication</title>
+          <title>Example of successful EXTERNAL authentication</title>
           <programlisting>
-            (MAGIC_COOKIE is a made up mechanism)
+            31303030 is ASCII decimal "1000" represented in hex, so
+            the client is authenticating as Unix uid 1000 in this example.
 
-            C: AUTH MAGIC_COOKIE 3138363935333137393635383634
+            C: AUTH EXTERNAL 31303030
             S: OK 1234deadbeef
             C: BEGIN
           </programlisting>
@@ -2547,9 +2548,13 @@
         <figure>
           <title>Example of client sends unknown command then falls back to regular auth</title>
           <programlisting>
+            532d312d352d3138 is the Windows SID "S-1-5-18" in hex,
+            so the client is authenticating as Windows SID S-1-5-18
+            in this example.
+
             C: FOOBAR
             S: ERROR
-            C: AUTH MAGIC_COOKIE 3736343435313230333039
+            C: AUTH EXTERNAL 532d312d352d3138
             S: OK 1234deadbeef
             C: BEGIN
           </programlisting>
@@ -2557,7 +2562,7 @@
         <figure>
           <title>Example of server doesn't support initial auth mechanism</title>
           <programlisting>
-            C: AUTH MAGIC_COOKIE 3736343435313230333039
+            C: AUTH EXTERNAL
             S: REJECTED KERBEROS_V4 SKEY
             C: AUTH SKEY 7ab83f32ee
             S: DATA 8799cabb2ea93e
@@ -2569,7 +2574,7 @@
         <figure>
           <title>Example of wrong password or the like followed by successful retry</title>
           <programlisting>
-            C: AUTH MAGIC_COOKIE 3736343435313230333039
+            C: AUTH EXTERNAL 736d6376
             S: REJECTED KERBEROS_V4 SKEY
             C: AUTH SKEY 7ab83f32ee
             S: DATA 8799cabb2ea93e
@@ -2585,7 +2590,7 @@
         <figure>
           <title>Example of skey cancelled and restarted</title>
           <programlisting>
-            C: AUTH MAGIC_COOKIE 3736343435313230333039
+            C: AUTH EXTERNAL 32303438
             S: REJECTED KERBEROS_V4 SKEY
             C: AUTH SKEY 7ab83f32ee
             S: DATA 8799cabb2ea93e
@@ -2599,11 +2604,9 @@
           </programlisting>
         </figure>
         <figure>
-          <title>Example of successful magic cookie authentication with successful negotiation of Unix FD passing</title>
+          <title>Example of successful EXTERNAL authentication with successful negotiation of Unix FD passing</title>
           <programlisting>
-            (MAGIC_COOKIE is a made up mechanism)
-
-            C: AUTH MAGIC_COOKIE 3138363935333137393635383634
+            C: AUTH EXTERNAL 31303030
             S: OK 1234deadbeef
             C: NEGOTIATE_UNIX_FD
             S: AGREE_UNIX_FD
@@ -2611,11 +2614,9 @@
           </programlisting>
         </figure>
         <figure>
-          <title>Example of successful magic cookie authentication with unsuccessful negotiation of Unix FD passing</title>
+          <title>Example of successful EXTERNAL authentication with unsuccessful negotiation of Unix FD passing</title>
           <programlisting>
-            (MAGIC_COOKIE is a made up mechanism)
-
-            C: AUTH MAGIC_COOKIE 3138363935333137393635383634
+            C: AUTH EXTERNAL 31303030
             S: OK 1234deadbeef
             C: NEGOTIATE_UNIX_FD
             S: ERROR
