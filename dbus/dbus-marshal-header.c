@@ -1538,7 +1538,6 @@ _dbus_header_remove_unknown_fields (DBusHeader *header)
   while (_dbus_type_reader_get_current_type (&array) != DBUS_TYPE_INVALID)
     {
       DBusTypeReader sub;
-      DBusTypeReader variant;
       unsigned char field_code;
 
       _dbus_type_reader_recurse (&array, &sub);
@@ -1557,15 +1556,6 @@ _dbus_header_remove_unknown_fields (DBusHeader *header)
           correct_header_padding (header);
           _dbus_header_cache_invalidate_all (header);
         }
-      else
-        {
-          _dbus_type_reader_next (&sub);
-        }
-
-      _dbus_assert (_dbus_type_reader_get_current_type (&sub) == DBUS_TYPE_VARIANT);
-      _dbus_type_reader_recurse (&sub, &variant);
-
-      _dbus_header_cache_one (header, field_code, &variant);
 
       _dbus_type_reader_next (&array);
     }
