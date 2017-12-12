@@ -2204,6 +2204,31 @@
       NOT used here, only plain text messages.
     </para>
     <para>
+      Using SASL in D-Bus requires that we define the meaning of non-empty
+      authorization identity strings. When D-Bus is used on Unix platforms,
+      a non-empty SASL authorization identity represents a Unix user. An
+      authorization identity consisting entirely of ASCII decimal digits
+      represents a numeric user ID as defined by POSIX, for example
+      <literal>0</literal> for the root user or <literal>1000</literal>
+      for the first user created on many systems. Any other authorization
+      identity represents a login name as found in the
+      <literal>pw_name</literal> field of POSIX
+      <literal>struct passwd</literal>, for example
+      <literal>root</literal>, and will be normalized to the corresponding
+      numeric user ID. For best interoperability, clients and servers
+      should use numeric user IDs.
+    </para>
+    <para>
+      When D-Bus is used on Windows platforms, a non-empty SASL
+      authorization identity represents a Windows security identifier
+      (SID) in its string form, for example
+      <literal>S-1-5-21-3623811015-3361044348-30300820-1013</literal> for
+      a domain or local computer user or <literal>S-1-5-18</literal> for
+      the LOCAL_SYSTEM user. The user-facing usernames such as
+      <literal>Administrator</literal> or <literal>LOCAL_SYSTEM</literal>
+      are not used in the D-Bus protocol.
+    </para>
+    <para>
       In examples, "C:" and "S:" indicate lines sent by the client and
       server respectively. The client sends the first line, and the
       server must respond to each line from the client with a single-line
