@@ -593,10 +593,7 @@ test_weird_header_field (void        *user_data,
                        ==, DBUS_TYPE_BYTE);
       _dbus_type_reader_read_basic (&sub, &field_code);
 
-      if (field_code == NOT_A_HEADER_FIELD)
-        {
-          g_test_message ("TODO: header field was passed through");
-        }
+      g_assert_cmpuint (field_code, !=, NOT_A_HEADER_FIELD);
 
       _dbus_type_reader_next (&array);
     }
