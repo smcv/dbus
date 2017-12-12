@@ -34,6 +34,7 @@
 #include "signals.h"
 #include "test.h"
 #include <dbus/dbus-internals.h>
+#include <dbus/dbus-message-internal.h>
 #include <dbus/dbus-misc.h>
 #include <dbus/dbus-test-tap.h>
 #include <string.h>
@@ -285,6 +286,15 @@ bus_dispatch (DBusConnection *connection,
           dbus_connection_close (connection);
           goto out;
         }
+    }
+
+  /* Make sure the message does not have any header fields that we
+   * don't understand (or validate), so that we can add header fields
+   * in future and clients can assume that we have checked them. */
+  if (!_dbus_message_remove_unknown_fields (message))
+    {
+      BUS_SET_OOM (&error);
+      goto out;
     }
 
   service_name = dbus_message_get_destination (message);

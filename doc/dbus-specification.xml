@@ -1618,7 +1618,10 @@
           mutually-distrustful client to another, such as the message
           bus, should remove header fields that the server does not
           recognise. However, a client must assume that the server has
-          not done so, unless it has evidence to the contrary.
+          not done so, unless it has evidence to the contrary,
+          such as having checked for the <literal>HeaderFiltering</literal>
+          <link linkend="message-bus-properties-features">message bus
+            feature</link>.
         </para>
 
         <para>
@@ -6979,6 +6982,26 @@
                   for AppArmor should not result in this feature being
                   advertised on message bus instances where it is disabled by
                   message bus or operating system configuration.
+                </para>
+              </listitem>
+            </varlistentry>
+
+            <varlistentry>
+              <term><literal>HeaderFiltering</literal></term>
+              <listitem>
+                <para>
+                  This message bus guarantees that it will remove
+                  header fields that it does not understand when it
+                  relays messages, so that a client receiving a
+                  recently-defined header field that is specified to be
+                  controlled by the message bus can safely assume that
+                  it was in fact set by the message bus. This check is
+                  needed because older message bus implementations did
+                  not guarantee to filter headers in this way, so a
+                  malicious client could send any recently-defined
+                  header field with a crafted value of its choice
+                  through an older message bus that did not understand
+                  that header field.
                 </para>
               </listitem>
             </varlistentry>
