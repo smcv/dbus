@@ -1625,6 +1625,23 @@
         </para>
 
         <para>
+          When new header fields are added to this specification, if
+          they are controlled by the message bus, then the message bus
+          should normally only add them to messages that are to be
+          delivered to a client that previously requested those header
+          fields. It should remove those header fields from all other
+          messages that it relays. This design principle serves two
+          purposes: it avoids unnecessary memory and throughput overhead
+          when delivering messages to clients that are not interested in
+          the new header fields, and it provides a natural point at
+          which the client can check whether this message bus guarantees
+          to filter out faked header fields that might have been sent by
+          malicious peers (which is incentivized by the fact that any
+          client that relies on the new header fields but does not
+          ask for them would simply not work).
+        </para>
+
+        <para>
           Here are the currently-defined header fields:
           <informaltable>
             <tgroup cols="5">
