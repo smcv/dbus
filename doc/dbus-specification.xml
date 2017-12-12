@@ -2205,7 +2205,9 @@
     </para>
     <para>
       In examples, "C:" and "S:" indicate lines sent by the client and
-      server respectively.
+      server respectively. The client sends the first line, and the
+      server must respond to each line from the client with a single-line
+      reply, with one exception: there is no reply to the BEGIN command.
     </para>
     <sect2 id="auth-protocol-overview">
       <title>Protocol Overview</title>
