@@ -3065,18 +3065,59 @@
     <sect2 id="auth-mechanisms">
       <title>Authentication mechanisms</title>
       <para>
-        This section describes some new authentication mechanisms.
-        D-Bus also allows any standard SASL mechanism of course.
+        This section describes some authentication mechanisms that are
+        often supported by practical D-Bus implementations. The D-Bus
+        protocol also allows any other standard SASL mechanism, although
+        implementations of D-Bus often do not.
       </para>
+      <sect3 id="auth-mechanisms-external">
+        <title>EXTERNAL</title>
+        <para>
+          The EXTERNAL mechanism is defined in <ulink
+            url="https://tools.ietf.org/html/rfc4422#appendix-A">RFC 4422
+            "Simple Authentication and Security Layer (SASL)", appendix A
+            "The SASL EXTERNAL Mechanism"</ulink>. This is the recommended
+          authentication mechanism on platforms where credentials can be
+          transferred out-of-band, in particular Unix platforms that can
+          perform credentials-passing over the
+          <link linkend="transports-unix-domain-sockets-addresses"
+            >unix: transport</link>.
+        </para>
+        <para>
+          On Unix platforms, interoperable clients should prefer to send
+          the ASCII decimal string form of the integer Unix user ID as
+          the authorization identity, for example 1000. When encoded in
+          hex by the authentication protocol, this will typically result
+          in a line like <literal>AUTH EXTERNAL 31303030</literal> followed
+          by \r\n.
+        </para>
+        <para>
+          On Windows platforms, clients that use the EXTERNAL mechanism
+          should use the Windows security identifier in its string form
+          as the authorization identity, for example
+          <literal>S-1-5-21-3623811015-3361044348-30300820-1013</literal> for
+          a domain or local computer user or <literal>S-1-5-18</literal> for
+          the LOCAL_SYSTEM user. When encoded in hex by the authentication
+          protocol, this will typically result in a line like
+          <literal>AUTH EXTERNAL 532d312d352d3138</literal> followed by
+          \r\n.
+        </para>
+      </sect3>
       <sect3 id="auth-mechanisms-sha">
         <title>DBUS_COOKIE_SHA1</title>
         <para>
-          The DBUS_COOKIE_SHA1 mechanism is designed to establish that a client
+          DBUS_COOKIE_SHA1 is a D-Bus-specific SASL mechanism. Its
+          reference implementation is part of the reference implementation
+          of D-Bus.
+        </para>
+        <para>
+          This mechanism is designed to establish that a client
           has the ability to read a private file owned by the user being
           authenticated. If the client can prove that it has access to a secret
           cookie stored in this file, then the client is authenticated.
           Thus the security of DBUS_COOKIE_SHA1 depends on a secure home
-          directory.
+          directory. This is the recommended authentication mechanism
+          for platforms and configurations where EXTERNAL cannot be used.
         </para>
         <para>
           Throughout this description, "hex encoding" must output the digits
@@ -3210,6 +3251,18 @@
         <para>
           Clients need not lock the file in order to load it,
           because servers are required to save the file atomically.
+        </para>
+      </sect3>
+      <sect3 id="auth-mechanisms-anonymous">
+        <title>ANONYMOUS</title>
+        <para>
+          The ANONYMOUS mechanism is defined in <ulink
+            url="https://tools.ietf.org/html/rfc4505">RFC 4505 "Anonymous
+            Simple Authentication and Security Layer (SASL)
+            Mechanism"</ulink>.
+          It does not perform any authentication at all, and should not
+          be accepted by message buses. However, it might sometimes be
+          useful for non-message-bus uses of D-Bus.
         </para>
       </sect3>
     </sect2>
