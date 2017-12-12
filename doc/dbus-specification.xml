@@ -2271,6 +2271,9 @@
     <sect2 id="auth-command-auth">
       <title>AUTH command</title>
       <para>
+        The AUTH command is sent by the client to the server.
+      </para>
+      <para>
         If an AUTH command has no arguments, it is a request to list
         available mechanisms. The server must respond with a REJECTED
         command listing the mechanisms it understands, or with an error.
@@ -2301,6 +2304,9 @@
     <sect2 id="auth-command-cancel">
       <title>CANCEL Command</title>
       <para>
+        The CANCEL command is sent by the client to the server.
+      </para>
+      <para>
         At any time up to sending the BEGIN command, the client may send a
         CANCEL command. On receiving the CANCEL command, the server must
         send a REJECTED command and abort the current authentication
@@ -2321,6 +2327,9 @@
     </sect2>
     <sect2 id="auth-command-begin">
       <title>BEGIN Command</title>
+      <para>
+        The BEGIN command is sent by the client to the server.
+      </para>
       <para>
         The BEGIN command acknowledges that the client has received an
         OK command from the server and completed any feature negotiation
@@ -2343,6 +2352,9 @@
     <sect2 id="auth-command-rejected">
       <title>REJECTED Command</title>
       <para>
+        The REJECTED command is sent by the server to the client.
+      </para>
+      <para>
         The REJECTED command indicates that the current authentication
         exchange has failed, and further exchange of DATA is inappropriate.
         The client would normally try another mechanism, or try providing
@@ -2357,6 +2369,9 @@
     </sect2>
     <sect2 id="auth-command-ok">
       <title>OK Command</title>
+      <para>
+        The OK command is sent by the server to the client.
+      </para>
       <para>
         The OK command indicates that the client has been
         authenticated. The client may now proceed with negotiating
@@ -2389,6 +2404,9 @@
     <sect2 id="auth-command-error">
       <title>ERROR Command</title>
       <para>
+        The ERROR command can be sent in either direction.
+      </para>
+      <para>
         The ERROR command indicates that either server or client did not
         know a command, does not accept the given command in the current
         context, or did not understand the arguments to the command. This
@@ -2416,6 +2434,9 @@
     <sect2 id="auth-command-negotiate-unix-fd">
       <title>NEGOTIATE_UNIX_FD Command</title>
       <para>
+        The NEGOTIATE_UNIX_FD command is sent by the client to the server.
+      </para>
+      <para>
         The NEGOTIATE_UNIX_FD command indicates that the client
         supports Unix file descriptor passing. This command may only
         be sent after the connection is authenticated, i.e. after OK
@@ -2435,6 +2456,9 @@
     </sect2>
     <sect2 id="auth-command-agree-unix-fd">
       <title>AGREE_UNIX_FD Command</title>
+      <para>
+        The AGREE_UNIX_FD command is sent by the server to the client.
+      </para>
       <para>
         The AGREE_UNIX_FD command indicates that the server supports
         Unix file descriptor passing. This command may only be sent
