@@ -2272,6 +2272,7 @@
       <title>AUTH command</title>
       <para>
         The AUTH command is sent by the client to the server.
+        The server replies with DATA, OK or REJECTED.
       </para>
       <para>
         If an AUTH command has no arguments, it is a request to list
@@ -2305,6 +2306,7 @@
       <title>CANCEL Command</title>
       <para>
         The CANCEL command is sent by the client to the server.
+        The server replies with REJECTED.
       </para>
       <para>
         At any time up to sending the BEGIN command, the client may send a
@@ -2319,6 +2321,7 @@
         The DATA command may come from either client or server, and simply
         contains a hex-encoded block of data to be interpreted
         according to the SASL mechanism in use.
+        If sent by the client, the server replies with DATA, OK or REJECTED.
       </para>
       <para>
         Some SASL mechanisms support sending an "empty string";
@@ -2329,6 +2332,7 @@
       <title>BEGIN Command</title>
       <para>
         The BEGIN command is sent by the client to the server.
+        The server does not reply.
       </para>
       <para>
         The BEGIN command acknowledges that the client has received an
@@ -2405,6 +2409,7 @@
       <title>ERROR Command</title>
       <para>
         The ERROR command can be sent in either direction.
+        If sent by the client, the server replies with REJECTED.
       </para>
       <para>
         The ERROR command indicates that either server or client did not
@@ -2435,6 +2440,7 @@
       <title>NEGOTIATE_UNIX_FD Command</title>
       <para>
         The NEGOTIATE_UNIX_FD command is sent by the client to the server.
+        The server replies with AGREE_UNIX_FD or ERROR.
       </para>
       <para>
         The NEGOTIATE_UNIX_FD command indicates that the client
