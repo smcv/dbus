@@ -6722,32 +6722,6 @@
                 </entry>
               </row>
 
-              <row>
-                <entry>org.freedesktop.DBus.Containers1.Type</entry>
-                <entry>STRING</entry>
-                <entry>
-                  The container technology that created the container
-                  instance, as passed to <literal>AddServer</literal>.
-                  Omitted from the dictionary if this connection is not
-                  via a container's server. For example, a typical value
-                  for a Flatpak application would be
-                  <literal>org.flatpak</literal>.
-                </entry>
-              </row>
-
-              <row>
-                <entry>org.freedesktop.DBus.Containers1.Name</entry>
-                <entry>STRING</entry>
-                <entry>
-                  The contained app name for the container instance,
-                  as passed to <literal>AddServer</literal>. Omitted
-                  from the dictionary if this connection is not via a
-                  container's server. For example, a typical value for
-                  a Flatpak application would be
-                  <literal>org.gnome.Weather</literal>.
-                </entry>
-              </row>
-
             </tbody>
           </tgroup>
         </informaltable>
