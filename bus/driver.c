@@ -1903,6 +1903,99 @@ bus_driver_handle_get_connection_selinux_security_context (DBusConnection *conne
   return FALSE;
 }
 
+/*
+ * Write the credentials of connection @conn (or the bus daemon itself,
+ * if @conn is #NULL) into the a{sv} @asv_iter. Return #FALSE on OOM.
+ */
+dbus_bool_t
+bus_driver_fill_connection_credentials (DBusConnection  *conn,
+                                        DBusMessageIter *asv_iter)
+{
+  unsigned long ulong_uid, ulong_pid;
+  char *s;
+  const char *path;
+
+  if (conn == NULL)
+    {
+      ulong_pid = _dbus_getpid ();
+      ulong_uid = _dbus_getuid ();
+    }
+  else
+    {
+      if (!dbus_connection_get_unix_process_id (conn, &ulong_pid))
+        ulong_pid = DBUS_PID_UNSET;
+
+      if (!dbus_connection_get_unix_user (conn, &ulong_uid))
+        ulong_uid = DBUS_UID_UNSET;
+    }
+
+  /* we can't represent > 32-bit pids; if your system needs them, please
+   * add ProcessID64 to the spec or something */
+  if (ulong_pid <= _DBUS_UINT32_MAX && ulong_pid != DBUS_PID_UNSET &&
+      !_dbus_asv_add_uint32 (asv_iter, "ProcessID", ulong_pid))
+    return FALSE;
+
+  /* we can't represent > 32-bit uids; if your system needs them, please
+   * add UnixUserID64 to the spec or something */
+  if (ulong_uid <= _DBUS_UINT32_MAX && ulong_uid != DBUS_UID_UNSET &&
+      !_dbus_asv_add_uint32 (asv_iter, "UnixUserID", ulong_uid))
+    return FALSE;
+
+  /* FIXME: Obtain the Windows user of the bus daemon itself */
+  if (conn != NULL &&
+      dbus_connection_get_windows_user (conn, &s))
+    {
+      DBusString str;
+      dbus_bool_t result;
+
+      if (s == NULL)
+        return FALSE;
+
+      _dbus_string_init_const (&str, s);
+      result = _dbus_validate_utf8 (&str, 0, _dbus_string_get_length (&str));
+      _dbus_string_free (&str);
+      if (result)
+        {
+          if (!_dbus_asv_add_string (asv_iter, "WindowsSID", s))
+            {
+              dbus_free (s);
+              return FALSE;
+            }
+        }
+      dbus_free (s);
+    }
+
+  /* FIXME: Obtain the security label for the bus daemon itself */
+  if (conn != NULL &&
+      _dbus_connection_get_linux_security_label (conn, &s))
+    {
+      if (s == NULL)
+        return FALSE;
+
+      /* use the GVariant bytestring convention for strings of unknown
+       * encoding: include the \0 in the payload, for zero-copy reading */
+      if (!_dbus_asv_add_byte_array (asv_iter, "LinuxSecurityLabel",
+                                     s, strlen (s) + 1))
+        {
+          dbus_free (s);
+          return FALSE;
+        }
+
+      dbus_free (s);
+    }
+
+  if (conn != NULL &&
+      bus_containers_connection_is_contained (conn, &path, NULL, NULL))
+    {
+      if (!_dbus_asv_add_object_path (asv_iter,
+                                      DBUS_INTERFACE_CONTAINERS1 ".Instance",
+                                      path))
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
 static dbus_bool_t
 bus_driver_handle_get_connection_credentials (DBusConnection *connection,
                                               BusTransaction *transaction,
@@ -1913,9 +2006,6 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
   DBusMessage *reply;
   DBusMessageIter reply_iter;
   DBusMessageIter array_iter;
-  unsigned long ulong_uid, ulong_pid;
-  char *s;
-  const char *path;
   const char *service;
   BusDriverFound found;
 
@@ -1929,16 +2019,13 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
   switch (found)
     {
       case BUS_DRIVER_FOUND_SELF:
-        ulong_pid = _dbus_getpid ();
-        ulong_uid = _dbus_getuid ();
+        conn = NULL;
         break;
 
       case BUS_DRIVER_FOUND_PEER:
-        if (!dbus_connection_get_unix_process_id (conn, &ulong_pid))
-          ulong_pid = DBUS_PID_UNSET;
-        if (!dbus_connection_get_unix_user (conn, &ulong_uid))
-          ulong_uid = DBUS_UID_UNSET;
+        _dbus_assert (conn != NULL);
         break;
+
       case BUS_DRIVER_FOUND_ERROR:
         /* fall through */
       default:
@@ -1946,74 +2033,10 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
     }
 
   reply = _dbus_asv_new_method_return (message, &reply_iter, &array_iter);
-  if (reply == NULL)
-    goto oom;
 
-  /* we can't represent > 32-bit pids; if your system needs them, please
-   * add ProcessID64 to the spec or something */
-  if (ulong_pid <= _DBUS_UINT32_MAX && ulong_pid != DBUS_PID_UNSET &&
-      !_dbus_asv_add_uint32 (&array_iter, "ProcessID", ulong_pid))
-    goto oom;
-
-  /* we can't represent > 32-bit uids; if your system needs them, please
-   * add UnixUserID64 to the spec or something */
-  if (ulong_uid <= _DBUS_UINT32_MAX && ulong_uid != DBUS_UID_UNSET &&
-      !_dbus_asv_add_uint32 (&array_iter, "UnixUserID", ulong_uid))
-    goto oom;
-
-  /* FIXME: Obtain the Windows user of the bus daemon itself */
-  if (found == BUS_DRIVER_FOUND_PEER &&
-      dbus_connection_get_windows_user (conn, &s))
-    {
-      DBusString str;
-      dbus_bool_t result;
-
-      if (s == NULL)
-        goto oom;
-
-      _dbus_string_init_const (&str, s);
-      result = _dbus_validate_utf8 (&str, 0, _dbus_string_get_length (&str));
-      _dbus_string_free (&str);
-      if (result)
-        {
-          if (!_dbus_asv_add_string (&array_iter, "WindowsSID", s))
-            {
-              dbus_free (s);
-              goto oom;
-            }
-        }
-      dbus_free (s);
-    }
-
-  /* FIXME: Obtain the security label for the bus daemon itself */
-  if (found == BUS_DRIVER_FOUND_PEER &&
-      _dbus_connection_get_linux_security_label (conn, &s))
-    {
-      if (s == NULL)
-        goto oom;
-
-      /* use the GVariant bytestring convention for strings of unknown
-       * encoding: include the \0 in the payload, for zero-copy reading */
-      if (!_dbus_asv_add_byte_array (&array_iter, "LinuxSecurityLabel",
-                                     s, strlen (s) + 1))
-        {
-          dbus_free (s);
-          goto oom;
-        }
-
-      dbus_free (s);
-    }
-
-  if (found == BUS_DRIVER_FOUND_PEER &&
-      bus_containers_connection_is_contained (conn, &path, NULL, NULL))
-    {
-      if (!_dbus_asv_add_object_path (&array_iter,
-                                      DBUS_INTERFACE_CONTAINERS1 ".Instance",
-                                      path))
-        goto oom;
-    }
-
-  if (!_dbus_asv_close (&reply_iter, &array_iter))
+  if (reply == NULL ||
+      !bus_driver_fill_connection_credentials (conn, &array_iter) ||
+      !_dbus_asv_close (&reply_iter, &array_iter))
     goto oom;
 
   if (! bus_transaction_send_from_driver (transaction, connection, reply))
