@@ -7241,6 +7241,7 @@
           <programlisting>
             GetConnectionInstance (in STRING bus_name,
                                    out OBJECT_PATH container_instance,
+                                   out DICT&lt;STRING,VARIANT&gt; initiator,
                                    out STRING container_type,
                                    out STRING container_name,
                                    out DICT&lt;STRING,VARIANT&gt; metadata)
@@ -7276,31 +7277,54 @@
                 </row>
                 <row>
                   <entry>2</entry>
-                  <entry>STRING</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
                   <entry>
-                    Reversed domain name identifying a container
-                    manager or container technology, as passed to the
-                    <literal>AddServer</literal> method, such as
-                    <literal>org.flatpak</literal> or
-                    <literal>io.snapcraft</literal>.
+                    The credentials of the connection that called the
+                    <literal>AddServer</literal> method, encoded in the
+                    same way as the result of the
+                    <link linkend="bus-messages-get-connection-credentials"
+                      >GetConnectionCredentials</link> method.
+                    Unlike the container type, name and metadata, these
+                    are supplied by the message bus, and can be trusted to
+                    the same extent as GetConnectionCredentials.
                   </entry>
                 </row>
                 <row>
                   <entry>3</entry>
                   <entry>STRING</entry>
                   <entry>
-                    Some unique identifier for an application or container,
-                    whose meaning is defined by the maintainers of the
-                    container type.
+                    Reversed domain name identifying a container
+                    manager or container technology, as passed to the
+                    <literal>AddServer</literal> method, such as
+                    <literal>org.flatpak</literal> or
+                    <literal>io.snapcraft</literal>. This information
+                    was provided by the initiator of the per-container
+                    server, and should only be trusted by other processes
+                    if they trust that initiator.
                   </entry>
                 </row>
                 <row>
                   <entry>4</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Some unique identifier for an application or container,
+                    whose meaning is defined by the maintainers of the
+                    container type. Like the container type, this information
+                    was provided by the initiator of the per-container
+                    server, and should only be trusted by other processes
+                    if they trust that initiator.
+                  </entry>
+                </row>
+                <row>
+                  <entry>5</entry>
                   <entry>DICT&lt;STRING,VARIANT&gt;</entry>
                   <entry>
                     Metadata describing the application or container, with the
                     keys and values defined by the maintainers of the container
-                    type.
+                    type. Like the container type, this information
+                    was provided by the initiator of the per-container
+                    server, and should only be trusted by other processes
+                    if they trust that initiator.
                   </entry>
                 </row>
               </tbody>
@@ -7326,6 +7350,7 @@
           As a method:
           <programlisting>
             GetInstanceInfo (in OBJECT_PATH container_instance,
+                             out DICT&lt;STRING,VARIANT&gt; initiator,
                              out STRING container_type,
                              out STRING container_name,
                              out DICT&lt;STRING,VARIANT&gt; metadata)
@@ -7352,31 +7377,54 @@
                 </row>
                 <row>
                   <entry>1</entry>
-                  <entry>STRING</entry>
+                  <entry>DICT&lt;STRING,VARIANT&gt;</entry>
                   <entry>
-                    Reversed domain name identifying a container
-                    manager or container technology, as passed to the
-                    <literal>AddServer</literal> method, such as
-                    <literal>org.flatpak</literal> or
-                    <literal>io.snapcraft</literal>.
+                    The credentials of the connection that called the
+                    <literal>AddServer</literal> method, encoded in the
+                    same way as the result of the
+                    <link linkend="bus-messages-get-connection-credentials"
+                      >GetConnectionCredentials</link> method.
+                    Unlike the container type, name and metadata, these
+                    are supplied by the message bus, and can be trusted to
+                    the same extent as GetConnectionCredentials.
                   </entry>
                 </row>
                 <row>
                   <entry>2</entry>
                   <entry>STRING</entry>
                   <entry>
-                    Some unique identifier for an application or container,
-                    whose meaning is defined by the maintainers of the
-                    container type.
+                    Reversed domain name identifying a container
+                    manager or container technology, as passed to the
+                    <literal>AddServer</literal> method, such as
+                    <literal>org.flatpak</literal> or
+                    <literal>io.snapcraft</literal>. This information
+                    was provided by the initiator of the per-container
+                    server, and should only be trusted by other processes
+                    if they trust that initiator.
                   </entry>
                 </row>
                 <row>
                   <entry>3</entry>
+                  <entry>STRING</entry>
+                  <entry>
+                    Some unique identifier for an application or container,
+                    whose meaning is defined by the maintainers of the
+                    container type. Like the container type, this information
+                    was provided by the initiator of the per-container
+                    server, and should only be trusted by other processes
+                    if they trust that initiator.
+                  </entry>
+                </row>
+                <row>
+                  <entry>4</entry>
                   <entry>DICT&lt;STRING,VARIANT&gt;</entry>
                   <entry>
                     Metadata describing the application or container, with the
                     keys and values defined by the maintainers of the container
-                    type.
+                    type. Like the container type, this information
+                    was provided by the initiator of the per-container
+                    server, and should only be trusted by other processes
+                    if they trust that initiator.
                   </entry>
                 </row>
               </tbody>
