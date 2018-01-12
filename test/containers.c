@@ -284,13 +284,16 @@ test_basic (Fixture *f,
 {
 #ifdef HAVE_CONTAINERS_TEST
   GVariant *asv;
+  GVariant *creator;
   GVariant *parameters;
+  GVariantDict dict;
   const gchar *confined_unique_name;
   const gchar *path_from_query;
   const gchar *manager_unique_name;
   const gchar *name;
   const gchar *name_owner;
   const gchar *type;
+  guint32 uid;
   GStatBuf stat_buf;
   GVariant *tuple;
 
@@ -361,14 +364,20 @@ test_basic (Fixture *f,
                                   G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
   g_assert_no_error (f->error);
   g_assert_nonnull (tuple);
-  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ossa{sv})");
-  g_variant_get (tuple, "(&o&s&s@a{sv})", &path_from_query, &type, &name, &asv);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(oa{sv}ssa{sv})");
+  g_variant_get (tuple, "(&o@a{sv}&s&s@a{sv})",
+                 &path_from_query, &creator, &type, &name, &asv);
   g_assert_cmpstr (path_from_query, ==, f->instance_path);
+  g_variant_dict_init (&dict, creator);
+  g_assert_true (g_variant_dict_lookup (&dict, "UnixUserID", "u", &uid));
+  g_assert_cmpuint (uid, ==, _dbus_getuid ());
+  g_variant_dict_clear (&dict);
   g_assert_cmpstr (type, ==, "com.example.NotFlatpak");
   g_assert_cmpstr (name, ==, "sample-app");
   /* Trivial case: the metadata a{sv} is empty */
   g_assert_cmpuint (g_variant_n_children (asv), ==, 0);
   g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&creator, g_variant_unref);
   g_clear_pointer (&tuple, g_variant_unref);
 
   g_test_message ("Inspecting container instance info");
@@ -377,13 +386,18 @@ test_basic (Fixture *f,
                                   G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
   g_assert_no_error (f->error);
   g_assert_nonnull (tuple);
-  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ssa{sv})");
-  g_variant_get (tuple, "(&s&s@a{sv})", &type, &name, &asv);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(a{sv}ssa{sv})");
+  g_variant_get (tuple, "(@a{sv}&s&s@a{sv})", &creator, &type, &name, &asv);
+  g_variant_dict_init (&dict, creator);
+  g_assert_true (g_variant_dict_lookup (&dict, "UnixUserID", "u", &uid));
+  g_assert_cmpuint (uid, ==, _dbus_getuid ());
+  g_variant_dict_clear (&dict);
   g_assert_cmpstr (type, ==, "com.example.NotFlatpak");
   g_assert_cmpstr (name, ==, "sample-app");
   /* Trivial case: the metadata a{sv} is empty */
   g_assert_cmpuint (g_variant_n_children (asv), ==, 0);
   g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&creator, g_variant_unref);
   g_clear_pointer (&tuple, g_variant_unref);
 
   /* Check that the socket is cleaned up when the dbus-daemon is terminated */
@@ -454,6 +468,7 @@ test_metadata (Fixture *f,
 {
 #ifdef HAVE_CONTAINERS_TEST
   GVariant *asv;
+  GVariant *creator;
   GVariant *tuple;
   GVariant *parameters;
   GVariantDict dict;
@@ -461,6 +476,7 @@ test_metadata (Fixture *f,
   const gchar *path_from_query;
   const gchar *name;
   const gchar *type;
+  guint32 uid;
   guint u;
   gboolean b;
   const gchar *s;
@@ -519,9 +535,14 @@ test_metadata (Fixture *f,
                                   G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
   g_assert_no_error (f->error);
   g_assert_nonnull (tuple);
-  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ossa{sv})");
-  g_variant_get (tuple, "(&o&s&s@a{sv})", &path_from_query, &type, &name, &asv);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(oa{sv}ssa{sv})");
+  g_variant_get (tuple, "(&o@a{sv}&s&s@a{sv})",
+                 &path_from_query, &creator, &type, &name, &asv);
   g_assert_cmpstr (path_from_query, ==, f->instance_path);
+  g_variant_dict_init (&dict, creator);
+  g_assert_true (g_variant_dict_lookup (&dict, "UnixUserID", "u", &uid));
+  g_assert_cmpuint (uid, ==, _dbus_getuid ());
+  g_variant_dict_clear (&dict);
   g_assert_cmpstr (type, ==, "org.example.Springwatch");
   g_assert_cmpstr (name, ==, "");
   g_variant_dict_init (&dict, asv);
@@ -534,6 +555,7 @@ test_metadata (Fixture *f,
   g_variant_dict_clear (&dict);
   g_assert_cmpuint (g_variant_n_children (asv), ==, 3);
   g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&creator, g_variant_unref);
   g_clear_pointer (&tuple, g_variant_unref);
 
   g_test_message ("Inspecting container instance info");
@@ -542,8 +564,12 @@ test_metadata (Fixture *f,
                                   G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
   g_assert_no_error (f->error);
   g_assert_nonnull (tuple);
-  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(ssa{sv})");
-  g_variant_get (tuple, "(&s&s@a{sv})", &type, &name, &asv);
+  g_assert_cmpstr (g_variant_get_type_string (tuple), ==, "(a{sv}ssa{sv})");
+  g_variant_get (tuple, "(@a{sv}&s&s@a{sv})", &creator, &type, &name, &asv);
+  g_variant_dict_init (&dict, creator);
+  g_assert_true (g_variant_dict_lookup (&dict, "UnixUserID", "u", &uid));
+  g_assert_cmpuint (uid, ==, _dbus_getuid ());
+  g_variant_dict_clear (&dict);
   g_assert_cmpstr (type, ==, "org.example.Springwatch");
   g_assert_cmpstr (name, ==, "");
   g_variant_dict_init (&dict, asv);
@@ -556,6 +582,7 @@ test_metadata (Fixture *f,
   g_variant_dict_clear (&dict);
   g_assert_cmpuint (g_variant_n_children (asv), ==, 3);
   g_clear_pointer (&asv, g_variant_unref);
+  g_clear_pointer (&creator, g_variant_unref);
   g_clear_pointer (&tuple, g_variant_unref);
 
 #else /* !HAVE_CONTAINERS_TEST */

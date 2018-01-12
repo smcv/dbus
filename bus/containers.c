@@ -1130,6 +1130,7 @@ bus_containers_handle_get_connection_instance (DBusConnection *caller,
   DBusConnection *subject;
   DBusMessage *reply = NULL;
   DBusMessageIter writer;
+  DBusMessageIter arr_writer;
   const char *bus_name;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -1169,6 +1170,25 @@ bus_containers_handle_get_connection_instance (DBusConnection *caller,
 
   if (!dbus_message_append_args (reply,
                                  DBUS_TYPE_OBJECT_PATH, &instance->path,
+                                 DBUS_TYPE_INVALID))
+    goto oom;
+
+  dbus_message_iter_init_append (reply, &writer);
+
+  if (!dbus_message_iter_open_container (&writer, DBUS_TYPE_ARRAY, "{sv}",
+                                         &arr_writer))
+    goto oom;
+
+  if (!bus_driver_fill_connection_credentials (instance->creator, &arr_writer))
+    {
+      dbus_message_iter_abandon_container (&writer, &arr_writer);
+      goto oom;
+    }
+
+  if (!dbus_message_iter_close_container (&writer, &arr_writer))
+    goto oom;
+
+  if (!dbus_message_append_args (reply,
                                  DBUS_TYPE_STRING, &instance->type,
                                  DBUS_TYPE_STRING, &instance->name,
                                  DBUS_TYPE_INVALID))
@@ -1206,6 +1226,7 @@ bus_containers_handle_get_instance_info (DBusConnection *connection,
   BusContainerInstance *instance = NULL;
   DBusMessage *reply = NULL;
   DBusMessageIter writer;
+  DBusMessageIter arr_writer;
   const char *path;
 
   if (!dbus_message_get_args (message, error,
@@ -1232,6 +1253,21 @@ bus_containers_handle_get_instance_info (DBusConnection *connection,
   reply = dbus_message_new_method_return (message);
 
   if (reply == NULL)
+    goto oom;
+
+  dbus_message_iter_init_append (reply, &writer);
+
+  if (!dbus_message_iter_open_container (&writer, DBUS_TYPE_ARRAY, "{sv}",
+                                         &arr_writer))
+    goto oom;
+
+  if (!bus_driver_fill_connection_credentials (instance->creator, &arr_writer))
+    {
+      dbus_message_iter_abandon_container (&writer, &arr_writer);
+      goto oom;
+    }
+
+  if (!dbus_message_iter_close_container (&writer, &arr_writer))
     goto oom;
 
   if (!dbus_message_append_args (reply,

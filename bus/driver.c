@@ -2593,10 +2593,10 @@ static const MessageHandler containers_message_handlers[] = {
     METHOD_FLAG_NO_CONTAINERS },
   { "StopListening", "o", "", bus_containers_handle_stop_listening,
     METHOD_FLAG_NO_CONTAINERS },
-  { "GetConnectionInstance", "s", "ossa{sv}",
+  { "GetConnectionInstance", "s", "oa{sv}ssa{sv}",
     bus_containers_handle_get_connection_instance,
     METHOD_FLAG_NONE },
-  { "GetInstanceInfo", "o", "ssa{sv}", bus_containers_handle_get_instance_info,
+  { "GetInstanceInfo", "o", "a{sv}ssa{sv}", bus_containers_handle_get_instance_info,
     METHOD_FLAG_NONE },
   { NULL, NULL, NULL, NULL }
 };
