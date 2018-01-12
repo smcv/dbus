@@ -1476,6 +1476,22 @@ _dbus_transport_get_linux_security_label (DBusTransport  *transport,
 }
 
 /**
+ * If the transport has already been authenticated, return its
+ * credentials. If not, return #NULL.
+ *
+ * The caller must ref the returned credentials object if it wants to
+ * keep it.
+ */
+DBusCredentials *
+_dbus_transport_get_credentials (DBusTransport  *transport)
+{
+  if (!transport->authenticated)
+    return FALSE;
+
+  return _dbus_auth_get_identity (transport->auth);
+}
+
+/**
  * See dbus_connection_get_windows_user().
  *
  * @param transport the transport

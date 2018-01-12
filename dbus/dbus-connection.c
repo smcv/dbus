@@ -5379,6 +5379,25 @@ _dbus_connection_get_linux_security_label (DBusConnection  *connection,
   return result;
 }
 
+DBusCredentials *
+_dbus_connection_get_credentials (DBusConnection *connection)
+{
+  DBusCredentials *result;
+
+  _dbus_assert (connection != NULL);
+
+  CONNECTION_LOCK (connection);
+
+  if (!_dbus_transport_try_to_authenticate (connection->transport))
+    result = NULL;
+  else
+    result = _dbus_transport_get_credentials (connection->transport);
+
+  CONNECTION_UNLOCK (connection);
+
+  return result;
+}
+
 /**
  * Gets the Windows user SID of the connection if known.  Returns
  * #TRUE if the ID is filled in.  Always returns #FALSE on non-Windows

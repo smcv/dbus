@@ -25,6 +25,7 @@
 
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-connection.h>
+#include <dbus/dbus-credentials.h>
 #include <dbus/dbus-message.h>
 #include <dbus/dbus-transport.h>
 #include <dbus/dbus-resources.h>
@@ -117,6 +118,8 @@ void              _dbus_connection_set_pending_fds_function       (DBusConnectio
 DBUS_PRIVATE_EXPORT
 dbus_bool_t       _dbus_connection_get_linux_security_label       (DBusConnection  *connection,
                                                                    char           **label_p);
+DBUS_PRIVATE_EXPORT
+DBusCredentials  *_dbus_connection_get_credentials                (DBusConnection  *connection);
 
 /* if DBUS_ENABLE_STATS */
 DBUS_PRIVATE_EXPORT

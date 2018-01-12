@@ -25,6 +25,7 @@
 
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-connection.h>
+#include <dbus/dbus-credentials.h>
 #include <dbus/dbus-protocol.h>
 #include <dbus/dbus-address.h>
 
@@ -89,6 +90,7 @@ dbus_bool_t        _dbus_transport_get_windows_user       (DBusTransport        
                                                            char                      **windows_sid_p);
 dbus_bool_t        _dbus_transport_get_linux_security_label (DBusTransport            *transport,
                                                            char                      **label_p);
+DBusCredentials   *_dbus_transport_get_credentials        (DBusTransport  *transport);
 
 void               _dbus_transport_set_windows_user_function (DBusTransport              *transport,
                                                               DBusAllowWindowsUserFunction   function,
