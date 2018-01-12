@@ -30,6 +30,12 @@
 #include <dbus/dbus-test-tap.h>
 #include <string.h>
 
+/* It isn't obvious from its name, but this file is part of the Unix
+ * system-dependent part of libdbus. */
+#if defined(DBUS_WIN) || !defined(DBUS_UNIX)
+#error "This file only makes sense on Unix OSs"
+#endif
+
 #ifdef HAVE_SYSTEMD
 #include <systemd/sd-login.h>
 #endif

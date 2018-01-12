@@ -30,6 +30,13 @@
 #include "dbus-credentials.h"
 #include <string.h>
 
+/* It isn't obvious from its name, but this file is part of the Unix
+ * system-dependent part of libdbus. Windows has a parallel
+ * implementation of some of it in dbus-sysdeps-win.c. */
+#if defined(DBUS_WIN) || !defined(DBUS_UNIX)
+#error "This file only makes sense on Unix OSs"
+#endif
+
 /**
  * @addtogroup DBusInternalsUtils
  * @{
