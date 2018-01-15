@@ -1820,6 +1820,28 @@
                   This header field is controlled by the message sender.
                   </entry>
                 </row>
+                <row>
+                  <entry><literal>CONTAINER_INSTANCE</literal></entry>
+                  <entry>10</entry>
+                  <entry><literal>OBJECT_PATH</literal></entry>
+                  <entry>optional</entry>
+                  <entry>
+                    The object path representing the container instance
+                    (see <xref linkend="bus-messages-containers1-add-server"/>)
+                    that sent this message, or the root object path
+                    <literal>/</literal> if the message did not come from a
+                    connection to a container instance.
+                    In message bus implementations that implement the
+                    <literal>Containers1.RequestHeader</literal> method, this
+                    header field is controlled by the message bus: see the
+                    <link linkend="bus-messages-containers1-request-header"
+                      ><literal>Containers1.RequestHeader</literal>
+                      method</link> for details.
+                    Senders must not attempt to include this header field
+                    in messages; if they do, the message bus must not relay
+                    the message without first removing it.
+                  </entry>
+                </row>
               </tbody>
             </tgroup>
           </informaltable>
@@ -7474,6 +7496,45 @@
           return information about it. Otherwise, the
           <literal>org.freedesktop.DBus.Error.NotContainer</literal> error
           is returned.
+        </para>
+      </sect3>
+
+      <sect3 id="bus-messages-containers1-request-header">
+        <title><literal>org.freedesktop.DBus.Containers1.RequestHeader</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            RequestHeader ()
+          </programlisting>
+        </para>
+
+        <para>
+          Request that the message bus adds the
+          <literal>CONTAINER_INSTANCE</literal> header field to each
+          message that will be received by the connection that called
+          this method. If the message bus sends a successful reply,
+          the caller may assume that it will receive the
+          <literal>CONTAINER_INSTANCE</literal> header field in every
+          message, and that the value of that header field was generated
+          by the message bus and cannot be forged by the message sender.
+          If the message bus sends an unsuccessful reply, the caller
+          must not make any assumptions about that header field.
+        </para>
+        <para>
+          If a sender mistakenly or maliciously includes this header
+          field in a sent message, then message bus implementations that
+          implement this method call must not relay the message without
+          first removing the header field.
+        </para>
+        <para>
+          If a destination to which a message will be delivered has
+          successfully called this method, then the message bus must add
+          this header field to the copy of the message that will be
+          delivered to that destination. For messages that are delivered
+          to more than one destination, if another destination did not
+          request this header field, it is unspecified whether the
+          other destination will receive it anyway: D-Bus clients must
+          not rely on one behaviour or the other.
         </para>
       </sect3>
 
