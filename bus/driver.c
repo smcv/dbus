@@ -1908,82 +1908,66 @@ bus_driver_handle_get_connection_selinux_security_context (DBusConnection *conne
  * if @conn is #NULL) into the a{sv} @asv_iter. Return #FALSE on OOM.
  */
 dbus_bool_t
-bus_driver_fill_connection_credentials (DBusConnection  *conn,
+bus_driver_fill_connection_credentials (DBusCredentials *credentials,
+                                        DBusConnection  *conn,
                                         DBusMessageIter *asv_iter)
 {
-  unsigned long ulong_uid, ulong_pid;
-  char *s;
+  dbus_uid_t uid = DBUS_UID_UNSET;
+  dbus_pid_t pid = DBUS_PID_UNSET;
+  const char *windows_sid = NULL;
+  const char *linux_security_label = NULL;
   const char *path;
 
-  if (conn == NULL)
-    {
-      ulong_pid = _dbus_getpid ();
-      ulong_uid = _dbus_getuid ();
-    }
-  else
-    {
-      if (!dbus_connection_get_unix_process_id (conn, &ulong_pid))
-        ulong_pid = DBUS_PID_UNSET;
+  if (credentials == NULL && conn != NULL)
+    credentials = _dbus_connection_get_credentials (conn);
 
-      if (!dbus_connection_get_unix_user (conn, &ulong_uid))
-        ulong_uid = DBUS_UID_UNSET;
+  if (credentials != NULL)
+    {
+      pid = _dbus_credentials_get_pid (credentials);
+      uid = _dbus_credentials_get_unix_uid (credentials);
+      windows_sid = _dbus_credentials_get_windows_sid (credentials);
+      linux_security_label =
+        _dbus_credentials_get_linux_security_label (credentials);
     }
 
   /* we can't represent > 32-bit pids; if your system needs them, please
    * add ProcessID64 to the spec or something */
-  if (ulong_pid <= _DBUS_UINT32_MAX && ulong_pid != DBUS_PID_UNSET &&
-      !_dbus_asv_add_uint32 (asv_iter, "ProcessID", ulong_pid))
+  if (pid <= _DBUS_UINT32_MAX && pid != DBUS_PID_UNSET &&
+      !_dbus_asv_add_uint32 (asv_iter, "ProcessID", pid))
     return FALSE;
 
   /* we can't represent > 32-bit uids; if your system needs them, please
    * add UnixUserID64 to the spec or something */
-  if (ulong_uid <= _DBUS_UINT32_MAX && ulong_uid != DBUS_UID_UNSET &&
-      !_dbus_asv_add_uint32 (asv_iter, "UnixUserID", ulong_uid))
+  if (uid <= _DBUS_UINT32_MAX && uid != DBUS_UID_UNSET &&
+      !_dbus_asv_add_uint32 (asv_iter, "UnixUserID", uid))
     return FALSE;
 
-  /* FIXME: Obtain the Windows user of the bus daemon itself */
-  if (conn != NULL &&
-      dbus_connection_get_windows_user (conn, &s))
+  if (windows_sid != NULL)
     {
       DBusString str;
       dbus_bool_t result;
 
-      if (s == NULL)
-        return FALSE;
-
-      _dbus_string_init_const (&str, s);
+      _dbus_string_init_const (&str, windows_sid);
       result = _dbus_validate_utf8 (&str, 0, _dbus_string_get_length (&str));
       _dbus_string_free (&str);
       if (result)
         {
-          if (!_dbus_asv_add_string (asv_iter, "WindowsSID", s))
-            {
-              dbus_free (s);
-              return FALSE;
-            }
+          if (!_dbus_asv_add_string (asv_iter, "WindowsSID", windows_sid))
+            return FALSE;
         }
-      dbus_free (s);
     }
 
-  /* FIXME: Obtain the security label for the bus daemon itself */
-  if (conn != NULL &&
-      _dbus_connection_get_linux_security_label (conn, &s))
+  if (linux_security_label != NULL)
     {
-      if (s == NULL)
-        return FALSE;
-
       /* use the GVariant bytestring convention for strings of unknown
        * encoding: include the \0 in the payload, for zero-copy reading */
       if (!_dbus_asv_add_byte_array (asv_iter, "LinuxSecurityLabel",
-                                     s, strlen (s) + 1))
-        {
-          dbus_free (s);
-          return FALSE;
-        }
-
-      dbus_free (s);
+                                     linux_security_label,
+                                     strlen (linux_security_label) + 1))
+        return FALSE;
     }
 
+  /* This has to come from the connection, not the credentials */
   if (conn != NULL &&
       bus_containers_connection_is_contained (conn, &path, NULL, NULL))
     {
@@ -2003,6 +1987,7 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
                                               DBusError      *error)
 {
   DBusConnection *conn;
+  DBusCredentials *credentials = NULL;
   DBusMessage *reply;
   DBusMessageIter reply_iter;
   DBusMessageIter array_iter;
@@ -2020,6 +2005,11 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
     {
       case BUS_DRIVER_FOUND_SELF:
         conn = NULL;
+        /* FIXME: Obtain the security label for the bus daemon itself,
+         * if we can (this doesn't include it, both for performance
+         * reasons and because LSMs don't guarantee that there is a way
+         * to get the same string that would have come from SO_PEERSEC) */
+        credentials = _dbus_credentials_new_from_current_process ();
         break;
 
       case BUS_DRIVER_FOUND_PEER:
@@ -2035,7 +2025,7 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
   reply = _dbus_asv_new_method_return (message, &reply_iter, &array_iter);
 
   if (reply == NULL ||
-      !bus_driver_fill_connection_credentials (conn, &array_iter) ||
+      !bus_driver_fill_connection_credentials (credentials, conn, &array_iter) ||
       !_dbus_asv_close (&reply_iter, &array_iter))
     goto oom;
 
@@ -2049,7 +2039,7 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
     }
 
   dbus_message_unref (reply);
-
+  _dbus_clear_credentials (&credentials);
   return TRUE;
 
  oom:
@@ -2064,6 +2054,7 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
       dbus_message_unref (reply);
     }
 
+  _dbus_clear_credentials (&credentials);
   return FALSE;
 }
 
