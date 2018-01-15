@@ -1032,10 +1032,37 @@ bus_connection_get_unix_groups  (DBusConnection   *connection,
                                  int              *n_groups,
                                  DBusError        *error)
 {
+  const unsigned long *groups_borrowed = NULL;
+  DBusCredentials *credentials;
   unsigned long uid;
 
   *groups = NULL;
   *n_groups = 0;
+
+  credentials = _dbus_connection_get_credentials (connection);
+
+  if (credentials != NULL &&
+      _dbus_credentials_get_unix_gids (credentials, &groups_borrowed,
+                                       n_groups))
+    {
+      int i;
+
+      /* We got the group IDs from SO_PEERGROUPS or equivalent - no
+       * need to ask NSS */
+
+      *groups = dbus_new (dbus_gid_t, *n_groups);
+
+      if (groups == NULL)
+        {
+          BUS_SET_OOM (error);
+          return FALSE;
+        }
+
+      for (i = 0; i < *n_groups; i++)
+        (*groups)[i] = groups_borrowed[i];
+
+      return TRUE;
+    }
 
   if (dbus_connection_get_unix_user (connection, &uid))
     {
