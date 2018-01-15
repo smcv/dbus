@@ -1748,6 +1748,116 @@ write_credentials_byte (int             server_fd,
     }
 }
 
+/* return FALSE on OOM, TRUE otherwise, even if no groups were found */
+static dbus_bool_t
+add_groups_to_credentials (int              client_fd,
+                           DBusCredentials *credentials,
+                           dbus_gid_t       primary)
+{
+#if defined(__linux__) && defined(SO_PEERGROUPS)
+  _DBUS_STATIC_ASSERT (sizeof (gid_t) <= sizeof (dbus_gid_t));
+  gid_t *buf = NULL;
+  socklen_t len = 1024;
+  dbus_bool_t oom = FALSE;
+  /* libdbus has a different representation of group IDs just to annoy you */
+  dbus_gid_t *converted_gids = NULL;
+  dbus_bool_t need_primary = TRUE;
+  size_t n_gids;
+  size_t i;
+
+  n_gids = ((size_t) len) / sizeof (gid_t);
+  buf = dbus_new (gid_t, n_gids);
+
+  if (buf == NULL)
+    return FALSE;
+
+  while (getsockopt (client_fd, SOL_SOCKET, SO_PEERGROUPS, buf, &len) < 0)
+    {
+      int e = errno;
+      gid_t *replacement;
+
+      _dbus_verbose ("getsockopt failed with %s, len now %lu\n",
+                     _dbus_strerror (e), (unsigned long) len);
+
+      if (e != ERANGE || (size_t) len <= n_gids * sizeof (gid_t))
+        {
+          _dbus_verbose ("Failed to getsockopt(SO_PEERGROUPS): %s\n",
+                         _dbus_strerror (e));
+          goto out;
+        }
+
+      /* If not enough space, len is updated to be enough.
+       * Try again with a large enough buffer. */
+      n_gids = ((size_t) len) / sizeof (gid_t);
+      replacement = dbus_realloc (buf, len);
+
+      if (replacement == NULL)
+        {
+          oom = TRUE;
+          goto out;
+        }
+
+      buf = replacement;
+      _dbus_verbose ("will try again with %lu\n", (unsigned long) len);
+    }
+
+  if (len <= 0)
+    {
+      _dbus_verbose ("getsockopt(SO_PEERGROUPS) yielded <= 0 bytes: %ld\n",
+                     (long) len);
+      goto out;
+    }
+
+  if (len > n_gids * sizeof (gid_t))
+    {
+      _dbus_verbose ("%lu > %zu", (unsigned long) len, n_gids * sizeof (gid_t));
+      _dbus_assert_not_reached ("getsockopt(SO_PEERGROUPS) overflowed");
+    }
+
+  if (len % sizeof (gid_t) != 0)
+    {
+      _dbus_verbose ("getsockopt(SO_PEERGROUPS) did not return an "
+                     "integer multiple of sizeof(gid_t): %lu should be "
+                     "divisible by %zu",
+                     (unsigned long) len, sizeof (gid_t));
+      goto out;
+    }
+
+  /* Allocate an extra space for the primary group ID */
+  n_gids = ((size_t) len) / sizeof (gid_t);
+  converted_gids = dbus_new (dbus_gid_t, n_gids + 1);
+
+  if (converted_gids == 0)
+    {
+      oom = TRUE;
+      goto out;
+    }
+
+  for (i = 0; i < n_gids; i++)
+    {
+      converted_gids[i] = (dbus_gid_t) buf[i];
+
+      if (converted_gids[i] == primary)
+        need_primary = FALSE;
+    }
+
+  if (need_primary && primary != DBUS_GID_UNSET)
+    {
+      converted_gids[n_gids] = primary;
+      n_gids++;
+    }
+
+  _dbus_credentials_take_unix_gids (credentials, converted_gids, n_gids);
+
+out:
+  dbus_free (buf);
+  return !oom;
+#else
+  /* no error */
+  return TRUE;
+#endif
+}
+
 /* return FALSE on OOM, TRUE otherwise, even if no credentials were found */
 static dbus_bool_t
 add_linux_security_label_to_credentials (int              client_fd,
@@ -1896,6 +2006,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
   struct iovec iov;
   char buf;
   dbus_uid_t uid_read;
+  dbus_gid_t primary_gid_read;
   dbus_pid_t pid_read;
   int bytes_read;
 
@@ -1915,6 +2026,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
   _DBUS_STATIC_ASSERT (sizeof (gid_t) <= sizeof (dbus_gid_t));
 
   uid_read = DBUS_UID_UNSET;
+  primary_gid_read = DBUS_GID_UNSET;
   pid_read = DBUS_PID_UNSET;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -2001,6 +2113,12 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
       {
         pid_read = cr.pid;
         uid_read = cr.uid;
+#ifdef __linux__
+        /* Do other platforms have cr.gid? (Not that it really matters,
+         * because the gid is useless to us unless we know the complete
+         * group vector, which we only know on Linux.) */
+        primary_gid_read = cr.gid;
+#endif
       }
 #elif defined(HAVE_UNPCBID) && defined(LOCAL_PEEREID)
     /* Another variant of the above - used on NetBSD
@@ -2176,6 +2294,14 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
     }
 
   if (!add_linux_security_label_to_credentials (client_fd.fd, credentials))
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  /* We don't put any groups in the credentials unless we can put them
+   * all there. */
+  if (!add_groups_to_credentials (client_fd.fd, credentials, primary_gid_read))
     {
       _DBUS_SET_OOM (error);
       return FALSE;

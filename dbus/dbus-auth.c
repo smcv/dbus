@@ -1166,6 +1166,11 @@ handle_server_data_external_mech (DBusAuth         *auth,
         return FALSE;
 
       if (!_dbus_credentials_add_credential (auth->authorized_identity,
+                                             DBUS_CREDENTIAL_UNIX_GROUP_IDS,
+                                             auth->credentials))
+        return FALSE;
+
+      if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                              DBUS_CREDENTIAL_LINUX_SECURITY_LABEL,
                                              auth->credentials))
         return FALSE;
