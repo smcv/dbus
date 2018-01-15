@@ -1556,3 +1556,15 @@ _dbus_daemon_report_reloaded (void)
   _dbus_daemon_report_ready ();
 #endif
 }
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * shutting down. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_stopping (void)
+{
+#ifdef HAVE_SYSTEMD
+  sd_notify (0, "STOPPING=1");
+#endif
+}

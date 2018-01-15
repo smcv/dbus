@@ -690,6 +690,7 @@ void            _dbus_rlimit_free                          (DBusRLimit   *lim);
 void            _dbus_daemon_report_ready                  (void);
 void            _dbus_daemon_report_reloading              (void);
 void            _dbus_daemon_report_reloaded               (void);
+void            _dbus_daemon_report_stopping               (void);
 
 /** @} */
 

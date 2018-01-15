@@ -1669,3 +1669,8 @@ void
 _dbus_daemon_report_reloaded (void)
 {
 }
+
+void
+_dbus_daemon_report_stopping (void)
+{
+}

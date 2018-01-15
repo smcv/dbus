@@ -320,6 +320,7 @@ handle_reload_watch (DBusWatch    *watch,
         loop = bus_context_get_loop (context);
         if (loop != NULL)
           {
+            _dbus_daemon_report_stopping ();
             _dbus_loop_quit (loop);
           }
       }
