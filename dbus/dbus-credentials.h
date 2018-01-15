@@ -105,6 +105,13 @@ DBUS_PRIVATE_EXPORT
 dbus_bool_t      _dbus_credentials_to_string_append         (DBusCredentials    *credentials,
                                                              DBusString         *string);
 
+static inline void
+_dbus_clear_credentials (DBusCredentials **pointer_to_creds)
+{
+  _dbus_clear_pointer_impl (DBusCredentials, pointer_to_creds,
+                            _dbus_credentials_unref);
+}
+
 DBUS_END_DECLS
 
 #endif /* DBUS_CREDENTIALS_H */
