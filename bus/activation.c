@@ -848,6 +848,14 @@ populate_environment (BusActivation *activation)
   retval = _dbus_hash_table_from_array (activation->environment, environment, '=');
   dbus_free_string_array (environment);
 
+  /* These environment variables are set by systemd for the dbus-daemon
+   * itself, and are not applicable to our child processes. */
+  _dbus_hash_table_remove_string (activation->environment, "JOURNAL_STREAM");
+  _dbus_hash_table_remove_string (activation->environment, "LISTEN_FDNAMES");
+  _dbus_hash_table_remove_string (activation->environment, "LISTEN_FDS");
+  _dbus_hash_table_remove_string (activation->environment, "LISTEN_PID");
+  _dbus_hash_table_remove_string (activation->environment, "NOTIFY_SOCKET");
+
   return retval;
 }
 
