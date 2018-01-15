@@ -1531,3 +1531,28 @@ _dbus_daemon_report_ready (void)
   sd_notify (0, "READY=1");
 #endif
 }
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * reloading configuration. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_reloading (void)
+{
+#ifdef HAVE_SYSTEMD
+  sd_notify (0, "RELOADING=1");
+#endif
+}
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * reloading configuration. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_reloaded (void)
+{
+#ifdef HAVE_SYSTEMD
+  /* For systemd, this is the same code */
+  _dbus_daemon_report_ready ();
+#endif
+}

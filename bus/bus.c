@@ -1064,6 +1064,8 @@ bus_context_reload_config (BusContext *context,
   DBusString config_file;
   dbus_bool_t ret;
 
+  _dbus_daemon_report_reloading ();
+
   /* Flush the user database cache */
   _dbus_flush_caches ();
 
@@ -1094,6 +1096,8 @@ bus_context_reload_config (BusContext *context,
     bus_context_log (context, DBUS_SYSTEM_LOG_INFO, "Unable to reload configuration: %s", error->message);
   if (parser != NULL)
     bus_config_parser_unref (parser);
+
+  _dbus_daemon_report_reloaded ();
   return ret;
 }
 
