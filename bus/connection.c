@@ -584,34 +584,48 @@ cache_peer_loginfo_string (BusConnectionData *d,
                            DBusConnection    *connection)
 {
   DBusString loginfo_buf;
-  unsigned long uid;
-  unsigned long pid;
-  char *windows_sid = NULL, *security_label = NULL;
+  dbus_uid_t uid = DBUS_UID_UNSET;
+  dbus_pid_t pid = DBUS_PID_UNSET;
+  const char *windows_sid = NULL;
+  const char *security_label = NULL;
   dbus_bool_t prev_added;
   const char *container = NULL;
   const char *container_type = NULL;
   const char *container_name = NULL;
+  DBusCredentials *credentials;
 
   if (!_dbus_string_init (&loginfo_buf))
     return FALSE;
-  
+
+  credentials = _dbus_connection_get_credentials (connection);
+
   prev_added = FALSE;
-  if (dbus_connection_get_unix_user (connection, &uid))
+
+  if (credentials != NULL)
     {
-      if (!_dbus_string_append_printf (&loginfo_buf, "uid=%ld", uid))
+      uid = _dbus_credentials_get_unix_uid (credentials);
+      pid = _dbus_credentials_get_pid (credentials);
+      windows_sid = _dbus_credentials_get_windows_sid (credentials);
+      security_label = _dbus_credentials_get_linux_security_label (credentials);
+    }
+
+  if (uid != DBUS_UID_UNSET)
+    {
+      if (!_dbus_string_append_printf (&loginfo_buf, "uid=" DBUS_UID_FORMAT, uid))
         goto oom;
       else
         prev_added = TRUE;
     }
 
-  if (dbus_connection_get_unix_process_id (connection, &pid))
+  if (pid != DBUS_PID_UNSET)
     {
       if (prev_added)
         {
           if (!_dbus_string_append_byte (&loginfo_buf, ' '))
             goto oom;
         }
-      if (!_dbus_string_append_printf (&loginfo_buf, "pid=%ld comm=\"", pid))
+      if (!_dbus_string_append_printf (&loginfo_buf,
+                                       "pid=" DBUS_PID_FORMAT " comm=\"", pid))
         goto oom;
       /* Ignore errors here; we may not have permissions to read the
        * proc file. */
@@ -622,7 +636,7 @@ cache_peer_loginfo_string (BusConnectionData *d,
         prev_added = TRUE;
     }
 
-  if (dbus_connection_get_windows_user (connection, &windows_sid))
+  if (windows_sid != NULL)
     {
       dbus_bool_t did_append;
 
@@ -634,15 +648,13 @@ cache_peer_loginfo_string (BusConnectionData *d,
 
       did_append = _dbus_string_append_printf (&loginfo_buf,
                                                "sid=\"%s\"", windows_sid);
-      dbus_free (windows_sid);
-      windows_sid = NULL;
       if (!did_append)
         goto oom;
       else
         prev_added = TRUE;
     }
 
-  if (_dbus_connection_get_linux_security_label (connection, &security_label))
+  if (security_label != NULL)
     {
       dbus_bool_t did_append;
 
@@ -654,14 +666,13 @@ cache_peer_loginfo_string (BusConnectionData *d,
 
       did_append = _dbus_string_append_printf (&loginfo_buf,
                                                "label=\"%s\"", security_label);
-      dbus_free (security_label);
-      security_label = NULL;
       if (!did_append)
         goto oom;
       else
         prev_added = TRUE;
     }
 
+  /* This does have to come from the connection, not the credentials */
   if (bus_containers_connection_is_contained (connection, &container,
                                               &container_type,
                                               &container_name))
@@ -693,11 +704,6 @@ cache_peer_loginfo_string (BusConnectionData *d,
   return TRUE;
 oom:
    _dbus_string_free (&loginfo_buf);
-   if (security_label != NULL)
-     dbus_free (security_label);
-   if (windows_sid != NULL)
-     dbus_free (windows_sid);
-
    return FALSE;
 }
 
