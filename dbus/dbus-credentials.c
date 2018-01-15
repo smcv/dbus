@@ -93,7 +93,7 @@ _dbus_credentials_new (void)
 }
 
 /**
- * Creates a new object with credentials (user ID and process ID) from the current process.
+ * Creates a new object with the most important credentials (user ID and process ID) from the current process.
  * @returns the new object or #NULL if no memory
  */
 DBusCredentials*

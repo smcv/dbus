@@ -2743,8 +2743,14 @@ _dbus_user_info_fill_uid (DBusUserInfo *info,
 }
 
 /**
- * Adds the credentials of the current process to the
- * passed-in credentials object.
+ * Adds the most important credentials of the current process
+ * (the uid and pid) to the passed-in credentials object.
+ *
+ * The group vector is not included because it is rarely needed.
+ * The Linux security label is not included because it is rarely
+ * needed, it requires reading /proc, and the LSM API doesn't actually
+ * guarantee that the string seen in /proc is comparable to the strings
+ * found in SO_PEERSEC results.
  *
  * @param credentials credentials to add to
  * @returns #FALSE if no memory; does not properly roll back on failure, so only some credentials may have been added
