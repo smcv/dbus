@@ -1025,6 +1025,8 @@ bus_context_new (const DBusString *config_file,
       goto failed;
     }
 
+  _dbus_daemon_report_ready ();
+
   if (parser != NULL)
     {
       bus_config_parser_unref (parser);

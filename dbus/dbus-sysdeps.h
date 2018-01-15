@@ -687,6 +687,8 @@ dbus_bool_t     _dbus_rlimit_restore_fd_limit              (DBusRLimit   *saved,
                                                             DBusError    *error);
 void            _dbus_rlimit_free                          (DBusRLimit   *lim);
 
+void            _dbus_daemon_report_ready                  (void);
+
 /** @} */
 
 DBUS_END_DECLS

@@ -1654,3 +1654,8 @@ _dbus_get_session_config_file (DBusString *str)
 
   return _dbus_get_config_file_name(str, "session.conf");
 }
+
+void
+_dbus_daemon_report_ready (void)
+{
+}

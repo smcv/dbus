@@ -1519,3 +1519,15 @@ _dbus_get_session_config_file (DBusString *str)
 
   return _dbus_string_append (str, DBUS_SESSION_CONFIG_FILE);
 }
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * ready for use. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_ready (void)
+{
+#ifdef HAVE_SYSTEMD
+  sd_notify (0, "READY=1");
+#endif
+}
