@@ -227,7 +227,7 @@ else (WIN32)
 		${DBUS_DIR}/dbus-userdb.h
 	)
 	set (DBUS_UTIL_SOURCES ${DBUS_UTIL_SOURCES}
-		${DBUS_DIR}/dbus-spawn.c
+		${DBUS_DIR}/dbus-spawn-unix.c
 		${DBUS_DIR}/dbus-userdb-util.c
 		${DBUS_DIR}/dbus-sysdeps-util-unix.c
 	)

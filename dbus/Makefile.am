@@ -116,7 +116,7 @@ DBUS_SHARED_arch_sources = 			\
 DBUS_UTIL_arch_sources = 			\
 	dbus-sysdeps-util-unix.c		\
 	dbus-userdb-util.c			\
-	dbus-spawn.c
+	dbus-spawn-unix.c			\
 endif
 
 if HAVE_LINUX_EPOLL

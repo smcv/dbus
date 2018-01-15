@@ -447,7 +447,7 @@ _dbus_verbose_real (
 
 /**
  * Reinitializes the verbose logging code, used
- * as a hack in dbus-spawn.c so that a child
+ * as a hack in dbus-spawn-unix.c so that a child
  * process re-reads its pid
  *
  */

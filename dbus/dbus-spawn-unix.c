@@ -1,5 +1,5 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
-/* dbus-spawn.c Wrapper around fork/exec
+/* dbus-spawn-unix.c — Wrapper around fork/exec
  *
  * Copyright (C) 2002, 2003, 2004  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
@@ -24,9 +24,6 @@
 
 #include <config.h>
 
-/* It isn't obvious from its name, but this file is part of the Unix
- * system-dependent part of libdbus. Windows has a parallel
- * implementation in dbus-spawn-win.c. */
 #if defined(DBUS_WIN) || !defined(DBUS_UNIX)
 #error "This file only makes sense on Unix OSs"
 #endif
