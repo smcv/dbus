@@ -41,9 +41,21 @@
 static DBusCredentials*
 make_credentials(dbus_uid_t  unix_uid,
                  dbus_pid_t  pid,
+                 int group_vector,
                  const char *windows_sid)
 {
   DBusCredentials *credentials;
+  static const struct
+    {
+      int n;
+      const dbus_gid_t gids[4];
+    }
+  group_vectors[] =
+    {
+        { 4, { 1000, 42, 123, 5678 } },
+        { 2, { 23, 1001 } },
+        { 4, { 5678, 123, 42, 1000 } }
+    };
 
   credentials = _dbus_credentials_new ();
 
@@ -63,6 +75,25 @@ make_credentials(dbus_uid_t  unix_uid,
           _dbus_credentials_unref (credentials);
           return NULL;
         }
+    }
+
+  if (group_vector)
+    {
+      dbus_gid_t *copy;
+
+      copy = dbus_new0 (dbus_gid_t, group_vectors[group_vector - 1].n);
+
+      if (copy == NULL)
+        {
+          _dbus_credentials_unref (credentials);
+          return NULL;
+        }
+
+      memcpy (copy, group_vectors[group_vector - 1].gids,
+              sizeof (dbus_gid_t) * group_vectors[group_vector - 1].n);
+
+      _dbus_credentials_take_unix_gids (credentials, copy,
+                                        group_vectors[group_vector - 1].n);
     }
 
   if (windows_sid != NULL)
@@ -85,11 +116,14 @@ _dbus_credentials_test (const char *test_data_dir)
 {
   DBusCredentials *creds;
   DBusCredentials *creds2;
+  DBusString str;
+  const dbus_gid_t *gids;
+  int n;
   
   if (test_data_dir == NULL)
     return TRUE;
 
-  creds = make_credentials (12, 511, SAMPLE_SID);
+  creds = make_credentials (12, 511, 1, SAMPLE_SID);
   if (creds == NULL)
     _dbus_test_fatal ("oom");
 
@@ -99,11 +133,18 @@ _dbus_credentials_test (const char *test_data_dir)
   
   _dbus_assert (_dbus_credentials_include (creds, DBUS_CREDENTIAL_UNIX_USER_ID));
   _dbus_assert (_dbus_credentials_include (creds, DBUS_CREDENTIAL_UNIX_PROCESS_ID));
+  _dbus_assert (_dbus_credentials_include (creds, DBUS_CREDENTIAL_UNIX_GROUP_IDS));
   _dbus_assert (_dbus_credentials_include (creds, DBUS_CREDENTIAL_WINDOWS_SID));
 
   _dbus_assert (_dbus_credentials_get_unix_uid (creds) == 12);
   _dbus_assert (_dbus_credentials_get_pid (creds) == 511);
   _dbus_assert (strcmp (_dbus_credentials_get_windows_sid (creds), SAMPLE_SID) == 0);
+  _dbus_assert (_dbus_credentials_get_unix_gids (creds, &gids, &n));
+  _dbus_assert (n == 4);
+  _dbus_assert (gids[0] == 42);
+  _dbus_assert (gids[1] == 123);
+  _dbus_assert (gids[2] == 1000);
+  _dbus_assert (gids[3] == 5678);
 
   _dbus_assert (!_dbus_credentials_are_empty (creds));
   _dbus_assert (!_dbus_credentials_are_anonymous (creds));
@@ -115,18 +156,25 @@ _dbus_credentials_test (const char *test_data_dir)
 
   _dbus_assert (_dbus_credentials_include (creds2, DBUS_CREDENTIAL_UNIX_USER_ID));
   _dbus_assert (_dbus_credentials_include (creds2, DBUS_CREDENTIAL_UNIX_PROCESS_ID));
+  _dbus_assert (_dbus_credentials_include (creds2, DBUS_CREDENTIAL_UNIX_GROUP_IDS));
   _dbus_assert (_dbus_credentials_include (creds2, DBUS_CREDENTIAL_WINDOWS_SID));
 
   _dbus_assert (_dbus_credentials_get_unix_uid (creds2) == 12);
   _dbus_assert (_dbus_credentials_get_pid (creds2) == 511);
   _dbus_assert (strcmp (_dbus_credentials_get_windows_sid (creds2), SAMPLE_SID) == 0);  
+  _dbus_assert (_dbus_credentials_get_unix_gids (creds2, &gids, &n));
+  _dbus_assert (n == 4);
+  _dbus_assert (gids[0] == 42);
+  _dbus_assert (gids[1] == 123);
+  _dbus_assert (gids[2] == 1000);
+  _dbus_assert (gids[3] == 5678);
 
   _dbus_assert (_dbus_credentials_are_superset (creds, creds2));
   
   _dbus_credentials_unref (creds2);
   
   /* Same user if both unix and windows are the same */
-  creds2 = make_credentials (12, DBUS_PID_UNSET, SAMPLE_SID);
+  creds2 = make_credentials (12, DBUS_PID_UNSET, 0, SAMPLE_SID);
   if (creds2 == NULL)
     _dbus_test_fatal ("oom");
 
@@ -135,7 +183,7 @@ _dbus_credentials_test (const char *test_data_dir)
   _dbus_credentials_unref (creds2);
 
   /* Not the same user if Windows is missing */
-  creds2 = make_credentials (12, DBUS_PID_UNSET, NULL);
+  creds2 = make_credentials (12, DBUS_PID_UNSET, 0, NULL);
   if (creds2 == NULL)
     _dbus_test_fatal ("oom");
 
@@ -145,7 +193,7 @@ _dbus_credentials_test (const char *test_data_dir)
   _dbus_credentials_unref (creds2);
 
   /* Not the same user if Windows is different */
-  creds2 = make_credentials (12, DBUS_PID_UNSET, OTHER_SAMPLE_SID);
+  creds2 = make_credentials (12, DBUS_PID_UNSET, 0, OTHER_SAMPLE_SID);
   if (creds2 == NULL)
     _dbus_test_fatal ("oom");
 
@@ -155,7 +203,7 @@ _dbus_credentials_test (const char *test_data_dir)
   _dbus_credentials_unref (creds2);
 
   /* Not the same user if Unix is missing */
-  creds2 = make_credentials (DBUS_UID_UNSET, DBUS_PID_UNSET, SAMPLE_SID);
+  creds2 = make_credentials (DBUS_UID_UNSET, DBUS_PID_UNSET, 0, SAMPLE_SID);
   if (creds2 == NULL)
     _dbus_test_fatal ("oom");
 
@@ -165,7 +213,7 @@ _dbus_credentials_test (const char *test_data_dir)
   _dbus_credentials_unref (creds2);
 
   /* Not the same user if Unix is different */
-  creds2 = make_credentials (15, DBUS_PID_UNSET, SAMPLE_SID);
+  creds2 = make_credentials (15, DBUS_PID_UNSET, 0, SAMPLE_SID);
   if (creds2 == NULL)
     _dbus_test_fatal ("oom");
 
@@ -175,13 +223,34 @@ _dbus_credentials_test (const char *test_data_dir)
   _dbus_credentials_unref (creds2);
 
   /* Not the same user if both are missing */
-  creds2 = make_credentials (DBUS_UID_UNSET, DBUS_PID_UNSET, NULL);
+  creds2 = make_credentials (DBUS_UID_UNSET, DBUS_PID_UNSET, 0, NULL);
   if (creds2 == NULL)
     _dbus_test_fatal ("oom");
 
   _dbus_assert (!_dbus_credentials_same_user (creds, creds2));
   _dbus_assert (_dbus_credentials_are_superset (creds, creds2));
   
+  _dbus_credentials_unref (creds2);
+
+  /* Same user, but not a superset, if groups are different */
+  creds2 = make_credentials (12, 511, 2, SAMPLE_SID);
+  if (creds2 == NULL)
+    _dbus_test_fatal ("oom");
+
+  _dbus_assert (_dbus_credentials_same_user (creds, creds2));
+  _dbus_assert (!_dbus_credentials_are_superset (creds, creds2));
+
+  _dbus_credentials_unref (creds2);
+
+  /* Groups being in the same order make no difference */
+  creds2 = make_credentials (12, 511, 3, SAMPLE_SID);
+  if (creds2 == NULL)
+    _dbus_test_fatal ("oom");
+
+  _dbus_assert (_dbus_credentials_same_user (creds, creds2));
+  _dbus_assert (_dbus_credentials_are_superset (creds, creds2));
+  _dbus_assert (_dbus_credentials_are_superset (creds2, creds));
+
   _dbus_credentials_unref (creds2);
 
   /* Clearing credentials works */
