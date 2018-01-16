@@ -268,7 +268,74 @@ _dbus_credentials_test (const char *test_data_dir)
   _dbus_assert (_dbus_credentials_are_anonymous (creds));
 
   _dbus_credentials_unref (creds);
-  
+
+  /* Make some more realistic credentials blobs to test stringification */
+  if (!_dbus_string_init (&str))
+    _dbus_test_fatal ("oom");
+
+  creds = make_credentials (12, DBUS_PID_UNSET, 0, NULL);
+  if (creds == NULL)
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_credentials_to_string_append (creds, &str))
+    _dbus_test_fatal ("oom");
+
+  _dbus_test_diag ("Unix uid only: %s", _dbus_string_get_const_data (&str));
+  _dbus_assert (strcmp (_dbus_string_get_const_data (&str),
+                        "uid=12") == 0);
+
+  _dbus_credentials_unref (creds);
+
+  creds = make_credentials (12, 511, 1, NULL);
+  if (creds == NULL)
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_string_set_length (&str, 0))
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_credentials_to_string_append (creds, &str))
+    _dbus_test_fatal ("oom");
+
+  _dbus_test_diag ("Unix complete set: %s", _dbus_string_get_const_data (&str));
+  _dbus_assert (strcmp (_dbus_string_get_const_data (&str),
+                        "uid=12 pid=511 gid=42 gid=123 gid=1000 gid=5678") == 0);
+
+  _dbus_credentials_unref (creds);
+
+  creds = make_credentials (DBUS_UID_UNSET, DBUS_PID_UNSET, 0, SAMPLE_SID);
+  if (creds == NULL)
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_string_set_length (&str, 0))
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_credentials_to_string_append (creds, &str))
+    _dbus_test_fatal ("oom");
+
+  _dbus_test_diag ("Windows sid only: %s", _dbus_string_get_const_data (&str));
+  _dbus_assert (strcmp (_dbus_string_get_const_data (&str),
+                        "sid=" SAMPLE_SID) == 0);
+
+  _dbus_credentials_unref (creds);
+
+  creds = make_credentials (DBUS_UID_UNSET, 511, 0, SAMPLE_SID);
+  if (creds == NULL)
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_string_set_length (&str, 0))
+    _dbus_test_fatal ("oom");
+
+  if (!_dbus_credentials_to_string_append (creds, &str))
+    _dbus_test_fatal ("oom");
+
+  _dbus_test_diag ("Windows complete set: %s", _dbus_string_get_const_data (&str));
+  _dbus_assert (strcmp (_dbus_string_get_const_data (&str),
+                        "pid=511 sid=" SAMPLE_SID) == 0);
+
+  _dbus_credentials_unref (creds);
+
+  _dbus_string_free (&str);
+
   return TRUE;
 }
 
