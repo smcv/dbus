@@ -681,8 +681,6 @@ _dbus_credentials_to_string_append (DBusCredentials    *credentials,
         goto oom;
       join = TRUE;
     }
-  else
-    join = FALSE;
 
   if (credentials->unix_gids != NULL)
     {
@@ -705,8 +703,6 @@ _dbus_credentials_to_string_append (DBusCredentials    *credentials,
         goto oom;
       join = TRUE;
     }
-  else
-    join = FALSE;
 
   if (credentials->linux_security_label != NULL)
     {
