@@ -440,6 +440,7 @@ in_data = \
 	data/systemd-activation/com.example.SystemdActivatable3.service.in \
 	data/valid-config-files-system/debug-allow-all-fail.conf.in \
 	data/valid-config-files-system/debug-allow-all-pass.conf.in \
+	data/valid-config-files/as-another-user.conf.in \
 	data/valid-config-files/count-fds.conf.in \
 	data/valid-config-files/debug-allow-all-sha1.conf.in \
 	data/valid-config-files/debug-allow-all.conf.in \
@@ -557,6 +558,7 @@ uninstalled-config-local:
 		sed \
 			-e 's,[@]DBUS_TEST_DATA[@],@abs_builddir@/data,' \
 			-e 's,[@]DBUS_TEST_EXEC[@],@abs_builddir@,' \
+			-e 's,[@]DBUS_USER[@],$(DBUS_USER),' \
 			-e 's,[@]EXEEXT[@],$(EXEEXT),' \
 			-e 's,[@]TEST_LAUNCH_HELPER_BINARY[@],@abs_top_builddir@/bus/dbus-daemon-launch-helper-test$(EXEEXT),' \
 			-e 's,[@]TEST_LISTEN[@],$(TEST_LISTEN),' \
@@ -571,6 +573,7 @@ if DBUS_ENABLE_INSTALLED_TESTS
 		sed \
 			-e 's,[@]DBUS_TEST_DATA[@],$(testexecdir)/data,' \
 			-e 's,[@]DBUS_TEST_EXEC[@],$(testexecdir),' \
+			-e 's,[@]DBUS_USER[@],$(DBUS_USER),' \
 			-e 's,[@]EXEEXT[@],$(EXEEXT),' \
 			-e 's,[@]TEST_LAUNCH_HELPER_BINARY[@],/bin/false,' \
 			-e 's,[@]TEST_LISTEN[@],$(TEST_LISTEN),' \

@@ -63,6 +63,7 @@ check_symbol_exists(SCM_RIGHTS    "sys/types.h;sys/socket.h;sys/un.h" HAVE_UNIX_
 check_symbol_exists(prctl        "sys/prctl.h"              HAVE_PRCTL)
 check_symbol_exists(raise        "signal.h"                 HAVE_RAISE)
 check_symbol_exists(getrlimit    "sys/resource.h;sys/time.h" HAVE_GETRLIMIT)
+check_symbol_exists(prlimit      "sys/resource.h;sys/time.h" HAVE_PRLIMIT)
 check_symbol_exists(setrlimit    "sys/resource.h;sys/time.h" HAVE_SETRLIMIT)
 
 check_struct_member(cmsgcred cmcred_pid "sys/types.h sys/socket.h" HAVE_CMSGCRED)   #  dbus-sysdeps.c

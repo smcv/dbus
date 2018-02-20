@@ -42,12 +42,21 @@
 #include <string.h>
 
 #ifdef DBUS_UNIX
+# include <pwd.h>
 # include <unistd.h>
 # include <sys/types.h>
 
 # ifdef HAVE_GIO_UNIX
     /* The CMake build system doesn't know how to check for this yet */
 #   include <gio/gunixfdmessage.h>
+# endif
+
+# ifdef HAVE_SYS_RESOURCE_H
+#   include <sys/resource.h>
+# endif
+
+# ifdef HAVE_SYS_TIME_H
+#   include <sys/time.h>
 # endif
 #endif
 
@@ -149,6 +158,7 @@ typedef struct {
     const char *bug_ref;
     guint min_messages;
     const char *config_file;
+    TestUser user;
     enum { SPECIFY_ADDRESS = 0, RELY_ON_DEFAULT } connect_mode;
 } Config;
 
@@ -178,8 +188,8 @@ setup (Fixture *f,
     }
 
   f->address = test_get_dbus_daemon (config ? config->config_file : NULL,
-                                     TEST_USER_ME, NULL,
-                                     &f->daemon_pid);
+                                     config ? config->user : TEST_USER_ME,
+                                     NULL, &f->daemon_pid);
 
   if (f->address == NULL)
     {
@@ -1843,6 +1853,71 @@ test_get_all (Fixture *f,
   dbus_clear_message (&m);
 }
 
+#define DESIRED_RLIMIT 65536
+
+#ifdef DBUS_UNIX
+static void
+test_fd_limit (Fixture *f,
+               gconstpointer context)
+{
+#ifdef HAVE_PRLIMIT
+  struct rlimit lim;
+  const struct passwd *pwd = NULL;
+#endif
+
+  if (f->skip)
+    return;
+
+#ifdef HAVE_PRLIMIT
+
+  if (getuid () != 0)
+    {
+      g_test_skip ("Cannot test, only uid 0 is expected to raise fd limit");
+      return;
+    }
+
+  pwd = getpwnam (DBUS_USER);
+
+  if (pwd == NULL)
+    {
+      gchar *message = g_strdup_printf ("user '%s' does not exist",
+          DBUS_USER);
+
+      g_test_skip (message);
+      g_free (message);
+      return;
+    }
+
+  if (prlimit (getpid (), RLIMIT_NOFILE, NULL, &lim) < 0)
+    g_error ("prlimit(): %s", g_strerror (errno));
+
+  g_test_message ("our RLIMIT_NOFILE: rlim_cur: %ld, rlim_max: %ld",
+                  (long) lim.rlim_cur, (long) lim.rlim_max);
+
+  if (lim.rlim_cur == RLIM_INFINITY || lim.rlim_cur >= DESIRED_RLIMIT)
+    {
+      /* The dbus-daemon will have inherited our large rlimit */
+      g_test_skip ("Cannot test, our own fd limit was already large");
+      return;
+    }
+
+  if (prlimit (f->daemon_pid, RLIMIT_NOFILE, NULL, &lim) < 0)
+    g_error ("prlimit(): %s", g_strerror (errno));
+
+  g_test_message ("dbus-daemon's RLIMIT_NOFILE: rlim_cur: %ld, rlim_max: %ld",
+                  (long) lim.rlim_cur, (long) lim.rlim_max);
+
+  if (lim.rlim_cur != RLIM_INFINITY)
+    g_assert_cmpint (lim.rlim_cur, >=, DESIRED_RLIMIT);
+
+#else /* !HAVE_PRLIMIT */
+
+  g_test_skip ("prlimit() not supported on this platform");
+
+#endif /* !HAVE_PRLIMIT */
+}
+#endif
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -1910,55 +1985,64 @@ teardown (Fixture *f,
 
 static Config limited_config = {
     "34393", 10000, "valid-config-files/incoming-limit.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 static Config finite_timeout_config = {
     NULL, 1, "valid-config-files/finite-timeout.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 #ifdef DBUS_UNIX
 static Config listen_unix_runtime_config = {
     "61303", 1, "valid-config-files/listen-unix-runtime.conf",
-    RELY_ON_DEFAULT
+    TEST_USER_ME, RELY_ON_DEFAULT
 };
 #endif
 
 static Config max_completed_connections_config = {
     NULL, 1, "valid-config-files/max-completed-connections.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 static Config max_connections_per_user_config = {
     NULL, 1, "valid-config-files/max-connections-per-user.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 static Config max_replies_per_connection_config = {
     NULL, 1, "valid-config-files/max-replies-per-connection.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 static Config max_match_rules_per_connection_config = {
     NULL, 1, "valid-config-files/max-match-rules-per-connection.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 static Config max_names_per_connection_config = {
     NULL, 1, "valid-config-files/max-names-per-connection.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 #if defined(DBUS_UNIX) && defined(HAVE_UNIX_FD_PASSING) && defined(HAVE_GIO_UNIX)
 static Config pending_fd_timeout_config = {
     NULL, 1, "valid-config-files/pending-fd-timeout.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 
 static Config count_fds_config = {
     NULL, 1, "valid-config-files/count-fds.conf",
-    SPECIFY_ADDRESS
+    TEST_USER_ME, SPECIFY_ADDRESS
+};
+#endif
+
+#if defined(DBUS_UNIX)
+static Config as_another_user_config = {
+    NULL, 1, "valid-config-files/as-another-user.conf",
+    /* We start the dbus-daemon as root and drop privileges, like the
+     * real system bus does */
+    TEST_USER_ROOT, SPECIFY_ADDRESS
 };
 #endif
 
@@ -2036,6 +2120,11 @@ main (int argc,
    * and that blocks on a round-trip to the dbus-daemon */
   g_test_add ("/unix-runtime-is-default", Fixture, &listen_unix_runtime_config,
       setup, test_echo, teardown);
+
+  g_test_add ("/fd-limit/session", Fixture, NULL,
+              setup, test_fd_limit, teardown);
+  g_test_add ("/fd-limit/system", Fixture, &as_another_user_config,
+              setup, test_fd_limit, teardown);
 #endif
 
   return g_test_run ();
