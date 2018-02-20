@@ -241,9 +241,12 @@ case "$ci_buildsys" in
             gnome-desktop-testing-runner -d /usr/local/share dbus/ || \
                 maybe_fail_tests
 
-            # these tests benefit from being re-run as root
+            # these tests benefit from being re-run as root, and one
+            # test needs a finite fd limit to be useful
             sudo env LD_LIBRARY_PATH=/usr/local/lib \
-            gnome-desktop-testing-runner -d /usr/local/share \
+            bash -c 'ulimit -S -n 1024; ulimit -H -n 4096; exec "$@"' bash \
+                gnome-desktop-testing-runner -d /usr/local/share \
+                dbus/test-dbus-daemon_with_config.test \
                 dbus/test-uid-permissions_with_config.test || \
                 maybe_fail_tests
         fi
