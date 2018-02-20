@@ -206,6 +206,8 @@
 #cmakedefine HAVE_ACCEPT4 1
 #cmakedefine HAVE_DIRFD 1
 #cmakedefine HAVE_INOTIFY_INIT1 1
+#cmakedefine HAVE_GETRLIMIT 1
+#cmakedefine HAVE_SETRLIMIT 1
 #cmakedefine HAVE_UNIX_FD_PASSING 1
 
 // structs
