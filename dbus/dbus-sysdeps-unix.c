@@ -4742,7 +4742,7 @@ _dbus_append_address_from_socket (DBusSocket  fd,
  err:
   dbus_set_error (error,
                   _dbus_error_from_errno (errno),
-                  "Failed to open socket: %s",
+                  "Failed to read address from socket: %s",
                   _dbus_strerror (errno));
   return FALSE;
 }
