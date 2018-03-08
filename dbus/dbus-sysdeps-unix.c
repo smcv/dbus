@@ -1325,6 +1325,77 @@ _dbus_listen_systemd_sockets (DBusSocket **fds,
 #endif
 }
 
+/*
+ * Try to convert the IPv4 or IPv6 address pointed to by
+ * sockaddr_pointer into a string.
+ *
+ * @param sockaddr_pointer A struct sockaddr_in or struct sockaddr_in6
+ * @param len The length of the struct pointed to by sockaddr_pointer
+ * @param string An array to write the address into
+ * @param string_len Length of string (should usually be at least INET6_ADDRSTRLEN)
+ * @param family_name Used to return "ipv4" or "ipv6", or NULL to ignore
+ * @param port Used to return the port number, or NULL to ignore
+ * @returns #FALSE with errno set if the address family was not understood
+ */
+static dbus_bool_t
+inet_sockaddr_to_string (const void *sockaddr_pointer,
+                         size_t len,
+                         char *string,
+                         size_t string_len,
+                         const char **family_name,
+                         dbus_uint16_t *port)
+{
+  union
+    {
+      struct sockaddr sa;
+      struct sockaddr_storage storage;
+      struct sockaddr_in ipv4;
+      struct sockaddr_in6 ipv6;
+    } addr;
+
+  if (len > sizeof (addr))
+    return FALSE;
+
+  _DBUS_ZERO (addr);
+  memcpy (&addr, sockaddr_pointer, len);
+
+  switch (addr.sa.sa_family)
+    {
+      case AF_INET:
+        if (inet_ntop (AF_INET, &addr.ipv4.sin_addr, string, string_len) != NULL)
+          {
+            if (family_name != NULL)
+              *family_name = "ipv4";
+
+            if (port != NULL)
+              *port = ntohs (addr.ipv4.sin_port);
+
+            return TRUE;
+          }
+
+        return FALSE;
+
+#ifdef AF_INET6
+      case AF_INET6:
+        if (inet_ntop (AF_INET6, &addr.ipv6.sin6_addr, string, string_len) != NULL)
+          {
+            if (family_name != NULL)
+              *family_name = "ipv6";
+
+            if (port != NULL)
+              *port = ntohs (addr.ipv6.sin6_port);
+
+            return TRUE;
+          }
+        return FALSE;
+#endif
+
+      default:
+        errno = EAFNOSUPPORT;
+        return FALSE;
+    }
+}
+
 /**
  * Creates a socket and connects to a socket at the given host
  * and port. The connection fd is returned, and is set up as
@@ -4662,6 +4733,8 @@ _dbus_append_address_from_socket (DBusSocket  fd,
   char hostip[INET6_ADDRSTRLEN];
   socklen_t size = sizeof (socket);
   DBusString path_str;
+  const char *family_name = NULL;
+  dbus_uint16_t port;
 
   if (getsockname (fd.fd, &socket.sa, &size))
     goto err;
@@ -4701,10 +4774,17 @@ _dbus_append_address_from_socket (DBusSocket  fd,
       break;
 
     case AF_INET:
-      if (inet_ntop (AF_INET, &socket.ipv4.sin_addr, hostip, sizeof (hostip)))
+#ifdef AF_INET6
+    case AF_INET6:
+#endif
+       _dbus_string_init_const (&path_str, hostip);
+
+      if (inet_sockaddr_to_string (&socket, size, hostip, sizeof (hostip),
+                                   &family_name, &port))
         {
-          if (_dbus_string_append_printf (address, "tcp:family=ipv4,host=%s,port=%u",
-                                          hostip, ntohs (socket.ipv4.sin_port)))
+          if (_dbus_string_append_printf (address, "tcp:family=%s,port=%u,host=",
+                                          family_name, port) &&
+              _dbus_address_append_escaped (address, &path_str))
             {
               return TRUE;
             }
@@ -4714,25 +4794,9 @@ _dbus_append_address_from_socket (DBusSocket  fd,
               return FALSE;
             }
         }
+
       goto err;
 
-#ifdef AF_INET6
-    case AF_INET6:
-      _dbus_string_init_const (&path_str, hostip);
-      if (inet_ntop (AF_INET6, &socket.ipv6.sin6_addr, hostip, sizeof (hostip)))
-        {
-          if (_dbus_string_append_printf (address, "tcp:family=ipv6,port=%u,host=",
-                                          ntohs (socket.ipv6.sin6_port)) &&
-              _dbus_address_append_escaped (address, &path_str))
-          else
-            {
-              _DBUS_SET_OOM (error);
-              return FALSE;
-            }
-        }
-      goto err;
-
-#endif
     default:
       dbus_set_error (error,
                       _dbus_error_from_errno (EINVAL),
