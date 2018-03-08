@@ -1563,7 +1563,8 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
                       _dbus_error_from_errno (errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host, port, gai_strerror(res), res);
-      return _dbus_socket_get_invalid ();
+      _dbus_socket_invalidate (&fd);
+      goto out;
     }
 
   tmp = ai;
@@ -1573,7 +1574,8 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
         {
           freeaddrinfo(ai);
           _DBUS_ASSERT_ERROR_IS_SET(error);
-          return _dbus_socket_get_invalid ();
+          _dbus_socket_invalidate (&fd);
+          goto out;
         }
       _DBUS_ASSERT_ERROR_IS_CLEAR(error);
 
@@ -1581,7 +1583,7 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
         {
           saved_errno = errno;
           _dbus_close (fd.fd, NULL);
-          fd.fd = -1;
+          _dbus_socket_invalidate (&fd);
           tmp = tmp->ai_next;
           continue;
         }
@@ -1590,13 +1592,13 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
     }
   freeaddrinfo(ai);
 
-  if (fd.fd == -1)
+  if (!_dbus_socket_is_valid (fd))
     {
       dbus_set_error (error,
                       _dbus_error_from_errno (saved_errno),
                       "Failed to connect to socket \"%s:%s\" %s",
                       host, port, _dbus_strerror(saved_errno));
-      return _dbus_socket_get_invalid ();
+      goto out;
     }
 
   if (noncefile != NULL)
@@ -1610,16 +1612,19 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
       if (!ret)
         {
           _dbus_close (fd.fd, NULL);
-          return _dbus_socket_get_invalid ();
+          _dbus_socket_invalidate (&fd);
+          goto out;
         }
     }
 
   if (!_dbus_set_fd_nonblocking (fd.fd, error))
     {
       _dbus_close (fd.fd, NULL);
-      return _dbus_socket_get_invalid ();
+      _dbus_socket_invalidate (&fd);
+      goto out;
     }
 
+out:
   return fd;
 }
 
