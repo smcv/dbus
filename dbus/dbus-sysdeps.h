@@ -706,6 +706,11 @@ void _dbus_set_error_with_inet_sockaddr (DBusError *error,
                                          size_t len,
                                          const char *description,
                                          int saved_errno);
+void _dbus_combine_tcp_errors (DBusList **sources,
+                               const char *summary,
+                               const char *host,
+                               const char *port,
+                               DBusError *dest);
 
 /** @} */
 

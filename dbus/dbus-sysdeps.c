@@ -908,6 +908,74 @@ _dbus_set_error_with_inet_sockaddr (DBusError *error,
     }
 }
 
+void
+_dbus_combine_tcp_errors (DBusList **sources,
+                          const char *summary,
+                          const char *host,
+                          const char *port,
+                          DBusError *dest)
+{
+  DBusString message = _DBUS_STRING_INIT_INVALID;
+
+  if (_dbus_list_length_is_one (sources))
+    {
+      /* If there was exactly one error, just use it */
+      dbus_move_error (_dbus_list_get_first (sources), dest);
+    }
+  else
+    {
+      DBusList *iter;
+      const char *name;
+
+      /* If there was more than one error, concatenate all the
+       * errors' diagnostic messages, and use their common error
+       * name, or DBUS_ERROR_FAILED if more than one name is
+       * represented */
+      if (!_dbus_string_init (&message))
+        {
+          _DBUS_SET_OOM (dest);
+          goto out;
+        }
+
+      for (iter = _dbus_list_get_first_link (sources);
+           iter != NULL;
+           iter = _dbus_list_get_next_link (sources, iter))
+        {
+          DBusError *error = iter->data;
+
+          if (name == NULL)
+            {
+              /* no error names known yet, try to use this one */
+              name = error->name;
+            }
+          else if (strcmp (name, error->name) != 0)
+            {
+              /* errors of two different names exist, reconcile by
+               * using FAILED */
+              name = DBUS_ERROR_FAILED;
+            }
+
+          if ((_dbus_string_get_length (&message) > 0 &&
+               !_dbus_string_append (&message, "; ")) ||
+              !_dbus_string_append (&message, error->message))
+            {
+              _DBUS_SET_OOM (dest);
+              goto out;
+            }
+        }
+
+      if (name == NULL)
+        name = DBUS_ERROR_FAILED;
+
+      dbus_set_error (dest, name, "%s to \"%s\":%s (%s)",
+                      summary, host ? host : "*", port,
+                      _dbus_string_get_const_data (&message));
+    }
+
+out:
+  _dbus_string_free (&message);
+}
+
 /** @} end of sysdeps */
 
 /* tests in dbus-sysdeps-util.c */
