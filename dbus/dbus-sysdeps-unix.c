@@ -1433,6 +1433,74 @@ set_error_with_inet_sockaddr (DBusError *error,
     }
 }
 
+static void
+combine_tcp_errors (DBusList **sources,
+                    const char *summary,
+                    const char *host,
+                    const char *port,
+                    DBusError *dest)
+{
+  DBusString message = _DBUS_STRING_INIT_INVALID;
+
+  if (_dbus_list_length_is_one (sources))
+    {
+      /* If there was exactly one error, just use it */
+      dbus_move_error (_dbus_list_get_first (sources), dest);
+    }
+  else
+    {
+      DBusList *iter;
+      const char *name;
+
+      /* If there was more than one error, concatenate all the
+       * errors' diagnostic messages, and use their common error
+       * name, or DBUS_ERROR_FAILED if more than one name is
+       * represented */
+      if (!_dbus_string_init (&message))
+        {
+          _DBUS_SET_OOM (dest);
+          goto out;
+        }
+
+      for (iter = _dbus_list_get_first_link (sources);
+           iter != NULL;
+           iter = _dbus_list_get_next_link (sources, iter))
+        {
+          DBusError *error = iter->data;
+
+          if (name == NULL)
+            {
+              /* no error names known yet, try to use this one */
+              name = error->name;
+            }
+          else if (strcmp (name, error->name) != 0)
+            {
+              /* errors of two different names exist, reconcile by
+               * using FAILED */
+              name = DBUS_ERROR_FAILED;
+            }
+
+          if ((_dbus_string_get_length (&message) > 0 &&
+               !_dbus_string_append (&message, "; ")) ||
+              !_dbus_string_append (&message, error->message))
+            {
+              _DBUS_SET_OOM (dest);
+              goto out;
+            }
+        }
+
+      if (name == NULL)
+        name = DBUS_ERROR_FAILED;
+
+      dbus_set_error (dest, name, "%s to \"%s\":%s (%s)",
+                      summary, host ? host : "*", port,
+                      _dbus_string_get_const_data (&message));
+    }
+
+out:
+  _dbus_string_free (&message);
+}
+
 /**
  * Creates a socket and connects to a socket at the given host
  * and port. The connection fd is returned, and is set up as
@@ -1581,6 +1649,8 @@ _dbus_listen_tcp_socket (const char     *host,
 {
   int saved_errno;
   int nlisten_fd = 0, res, i;
+  DBusList *bind_errors = NULL;
+  DBusError *bind_error = NULL;
   DBusSocket *listen_fd = NULL;
   struct addrinfo hints;
   struct addrinfo *ai, *tmp;
@@ -1653,27 +1723,49 @@ _dbus_listen_tcp_socket (const char     *host,
         {
           saved_errno = errno;
           _dbus_close(fd, NULL);
-          if (saved_errno == EADDRINUSE)
+
+          /*
+           * We don't treat this as a fatal error, because there might be
+           * other addresses that we can listen on. In particular:
+           *
+           * - If saved_errno is EADDRINUSE after we
+           *   "goto redo_lookup_with_port" after binding a port on one of the
+           *   possible addresses, we will try to bind that same port on
+           *   every address, including the same address again for a second
+           *   time, which will fail with EADDRINUSE.
+           *
+           * - If saved_errno is EADDRINUSE, it might be because binding to
+           *   an IPv6 address implicitly binds to a corresponding IPv4
+           *   address or vice versa (e.g. Linux with bindv6only=0).
+           *
+           * - If saved_errno is EADDRNOTAVAIL when we asked for family
+           *   AF_UNSPEC, it might be because IPv6 is disabled for this
+           *   particular interface (e.g. Linux with
+           *   /proc/sys/net/ipv6/conf/lo/disable_ipv6).
+           */
+          bind_error = dbus_new0 (DBusError, 1);
+
+          if (bind_error == NULL)
             {
-              /* Depending on kernel policy, binding to an IPv6 address
-                 might implicitly bind to a corresponding IPv4
-                 address or vice versa, resulting in EADDRINUSE for the
-                 other one (e.g. bindv6only=0 on Linux).
-
-                 Also, after we "goto redo_lookup_with_port" after binding
-                 a port on one of the possible addresses, we will
-                 try to bind that same port on every address, including the
-                 same address again for a second time; that one will
-                 also fail with EADDRINUSE.
-
-                 For both those reasons, ignore EADDRINUSE here */
-              tmp = tmp->ai_next;
-              continue;
+              _DBUS_SET_OOM (error);
+              goto failed;
             }
 
-          set_error_with_inet_sockaddr (error, tmp->ai_addr, tmp->ai_addrlen,
+          dbus_error_init (bind_error);
+          set_error_with_inet_sockaddr (bind_error, tmp->ai_addr, tmp->ai_addrlen,
                                         "Failed to bind socket", saved_errno);
-          goto failed;
+
+          if (!_dbus_list_append (&bind_errors, bind_error))
+            {
+              dbus_error_free (bind_error);
+              dbus_free (bind_error);
+              _DBUS_SET_OOM (error);
+              goto failed;
+            }
+
+          /* Try the next address, maybe it will work better */
+          tmp = tmp->ai_next;
+          continue;
         }
 
       if (listen (fd, 30 /* backlog */) < 0)
@@ -1751,10 +1843,7 @@ _dbus_listen_tcp_socket (const char     *host,
 
   if (!nlisten_fd)
     {
-      errno = EADDRINUSE;
-      dbus_set_error (error, _dbus_error_from_errno (errno),
-                      "Failed to bind socket \"%s:%s\": %s",
-                      host ? host : "*", port, _dbus_strerror (errno));
+      combine_tcp_errors (&bind_errors, "Failed to bind", host, port, error);
       goto failed;
     }
 
@@ -1768,6 +1857,14 @@ _dbus_listen_tcp_socket (const char     *host,
 
   *fds_p = listen_fd;
 
+  /* This list might be non-empty even on success, because we might be
+   * ignoring EADDRINUSE or EADDRNOTAVAIL */
+  while ((bind_error = _dbus_list_pop_first (&bind_errors)))
+    {
+      dbus_error_free (bind_error);
+      dbus_free (bind_error);
+    }
+
   return nlisten_fd;
 
  failed:
@@ -1775,6 +1872,13 @@ _dbus_listen_tcp_socket (const char     *host,
     freeaddrinfo(ai);
   for (i = 0 ; i < nlisten_fd ; i++)
     _dbus_close(listen_fd[i].fd, NULL);
+
+  while ((bind_error = _dbus_list_pop_first (&bind_errors)))
+    {
+      dbus_error_free (bind_error);
+      dbus_free (bind_error);
+    }
+
   dbus_free(listen_fd);
   return -1;
 }
