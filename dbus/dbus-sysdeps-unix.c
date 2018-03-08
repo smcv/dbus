@@ -4662,6 +4662,8 @@ _dbus_append_address_from_socket (DBusSocket  fd,
   char hostip[INET6_ADDRSTRLEN];
   socklen_t size = sizeof (socket);
   DBusString path_str;
+  const char *family_name = NULL;
+  dbus_uint16_t port;
 
   if (getsockname (fd.fd, &socket.sa, &size))
     goto err;
@@ -4701,10 +4703,17 @@ _dbus_append_address_from_socket (DBusSocket  fd,
       break;
 
     case AF_INET:
-      if (inet_ntop (AF_INET, &socket.ipv4.sin_addr, hostip, sizeof (hostip)))
+#ifdef AF_INET6
+    case AF_INET6:
+#endif
+       _dbus_string_init_const (&path_str, hostip);
+
+      if (_dbus_inet_sockaddr_to_string (&socket, size, hostip, sizeof (hostip),
+                                         &family_name, &port, error))
         {
-          if (_dbus_string_append_printf (address, "tcp:family=ipv4,host=%s,port=%u",
-                                          hostip, ntohs (socket.ipv4.sin_port)))
+          if (_dbus_string_append_printf (address, "tcp:family=%s,port=%u,host=",
+                                          family_name, port) &&
+              _dbus_address_append_escaped (address, &path_str))
             {
               return TRUE;
             }
@@ -4714,25 +4723,13 @@ _dbus_append_address_from_socket (DBusSocket  fd,
               return FALSE;
             }
         }
-      goto err;
-
-#ifdef AF_INET6
-    case AF_INET6:
-      _dbus_string_init_const (&path_str, hostip);
-      if (inet_ntop (AF_INET6, &socket.ipv6.sin6_addr, hostip, sizeof (hostip)))
+      else
         {
-          if (_dbus_string_append_printf (address, "tcp:family=ipv6,port=%u,host=",
-                                          ntohs (socket.ipv6.sin6_port)) &&
-              _dbus_address_append_escaped (address, &path_str))
-          else
-            {
-              _DBUS_SET_OOM (error);
-              return FALSE;
-            }
+          return FALSE;
         }
-      goto err;
+      /* not reached */
+      break;
 
-#endif
     default:
       dbus_set_error (error,
                       _dbus_error_from_errno (EINVAL),

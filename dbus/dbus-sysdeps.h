@@ -694,6 +694,14 @@ void            _dbus_daemon_report_reloading              (void);
 void            _dbus_daemon_report_reloaded               (void);
 void            _dbus_daemon_report_stopping               (void);
 
+dbus_bool_t _dbus_inet_sockaddr_to_string (const void *sockaddr_pointer,
+                                           size_t len,
+                                           char *string,
+                                           size_t string_len,
+                                           const char **family_name,
+                                           dbus_uint16_t *port,
+                                           DBusError *error);
+
 /** @} */
 
 DBUS_END_DECLS

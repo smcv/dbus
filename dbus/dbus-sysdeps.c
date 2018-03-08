@@ -58,6 +58,14 @@
 extern char **environ;
 #endif
 
+#ifdef DBUS_WIN
+#include "dbus-sockets-win.h"
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#endif
+
 /**
  * @defgroup DBusSysdeps Internal system-dependent API
  * @ingroup DBusInternals
@@ -771,6 +779,95 @@ _dbus_log (DBusSystemLogSeverity  severity,
   _dbus_logv (severity, msg, args);
 
   va_end (args);
+}
+
+/*
+ * Try to convert the IPv4 or IPv6 address pointed to by
+ * sockaddr_pointer into a string.
+ *
+ * @param sockaddr_pointer A struct sockaddr_in or struct sockaddr_in6
+ * @param len The length of the struct pointed to by sockaddr_pointer
+ * @param string An array to write the address into
+ * @param string_len Length of string (should usually be at least INET6_ADDRSTRLEN)
+ * @param family_name Used to return "ipv4" or "ipv6", or NULL to ignore
+ * @param port Used to return the port number, or NULL to ignore
+ * @returns #FALSE with errno set if the address family was not understood
+ */
+dbus_bool_t
+_dbus_inet_sockaddr_to_string (const void *sockaddr_pointer,
+                               size_t len,
+                               char *string,
+                               size_t string_len,
+                               const char **family_name,
+                               dbus_uint16_t *port,
+                               DBusError *error)
+{
+  union
+    {
+      struct sockaddr sa;
+      struct sockaddr_storage storage;
+      struct sockaddr_in ipv4;
+      struct sockaddr_in6 ipv6;
+    } addr;
+  int saved_errno;
+
+  if (len > sizeof (addr))
+    return FALSE;
+
+  _DBUS_ZERO (addr);
+  memcpy (&addr, sockaddr_pointer, len);
+
+  switch (addr.sa.sa_family)
+    {
+      case AF_INET:
+        if (inet_ntop (AF_INET, &addr.ipv4.sin_addr, string, string_len) != NULL)
+          {
+            if (family_name != NULL)
+              *family_name = "ipv4";
+
+            if (port != NULL)
+              *port = ntohs (addr.ipv4.sin_port);
+
+            return TRUE;
+          }
+        else
+          {
+            saved_errno = _dbus_get_low_level_socket_errno ();
+            dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                            "Failed to get identity of IPv4 socket: %s",
+                            _dbus_strerror (saved_errno));
+          }
+
+        return FALSE;
+
+#ifdef AF_INET6
+      case AF_INET6:
+        if (inet_ntop (AF_INET6, &addr.ipv6.sin6_addr, string, string_len) != NULL)
+          {
+            if (family_name != NULL)
+              *family_name = "ipv6";
+
+            if (port != NULL)
+              *port = ntohs (addr.ipv6.sin6_port);
+
+            return TRUE;
+          }
+        else
+          {
+            saved_errno = _dbus_get_low_level_socket_errno ();
+            dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                            "Failed to get identity of IPv6 socket: %s",
+                            _dbus_strerror (saved_errno));
+          }
+
+        return FALSE;
+#endif
+
+      default:
+        dbus_set_error (error, DBUS_ERROR_FAILED,
+                        "Failed to get identity of socket: unknown family");
+        return FALSE;
+    }
 }
 
 /** @} end of sysdeps */
