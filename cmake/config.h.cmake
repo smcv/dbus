@@ -228,6 +228,8 @@
 #  define DBUS_WINCE
 # else
 #  define DBUS_WIN32
+   /* Define to the minimum supported Windows version (0x0600 is Vista) */
+#  define _WIN32_WINNT 0x0600
 # endif
 #else
 # define DBUS_UNIX
