@@ -1531,10 +1531,12 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
                                      DBusError      *error)
 {
   int saved_errno = 0;
+  DBusList *connect_errors = NULL;
   DBusSocket fd = DBUS_SOCKET_INIT;
   int res;
   struct addrinfo hints;
   struct addrinfo *ai, *tmp;
+  DBusError *connect_error;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR(error);
 
@@ -1584,6 +1586,27 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
           saved_errno = errno;
           _dbus_close (fd.fd, NULL);
           _dbus_socket_invalidate (&fd);
+
+          connect_error = dbus_new0 (DBusError, 1);
+
+          if (connect_error == NULL)
+            {
+              _DBUS_SET_OOM (error);
+              goto out;
+            }
+
+          dbus_error_init (connect_error);
+          set_error_with_inet_sockaddr (connect_error, tmp->ai_addr, tmp->ai_addrlen,
+                                        "Failed to connect to socket", saved_errno);
+
+          if (!_dbus_list_append (&connect_errors, connect_error))
+            {
+              dbus_error_free (connect_error);
+              dbus_free (connect_error);
+              _DBUS_SET_OOM (error);
+              goto out;
+            }
+
           tmp = tmp->ai_next;
           continue;
         }
@@ -1594,10 +1617,8 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
 
   if (!_dbus_socket_is_valid (fd))
     {
-      dbus_set_error (error,
-                      _dbus_error_from_errno (saved_errno),
-                      "Failed to connect to socket \"%s:%s\" %s",
-                      host, port, _dbus_strerror(saved_errno));
+      combine_tcp_errors (&connect_errors, "Failed to connect",
+                          host, port, error);
       goto out;
     }
 
@@ -1625,6 +1646,12 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
     }
 
 out:
+  while ((connect_error = _dbus_list_pop_first (&connect_errors)))
+    {
+      dbus_error_free (connect_error);
+      dbus_free (connect_error);
+    }
+
   return fd;
 }
 
