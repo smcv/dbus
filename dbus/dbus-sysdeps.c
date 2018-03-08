@@ -870,6 +870,44 @@ _dbus_inet_sockaddr_to_string (const void *sockaddr_pointer,
     }
 }
 
+/*
+ * Format an error appropriate for saved_errno for the IPv4 or IPv6
+ * address pointed to by sockaddr_pointer of length sockaddr_len.
+ *
+ * @param error The error to set
+ * @param sockaddr_pointer A struct sockaddr_in or struct sockaddr_in6
+ * @param len The length of the struct pointed to by sockaddr_pointer
+ * @param description A prefix like "Failed to listen on socket"
+ * @param saved_errno The OS-level error number to use
+ */
+void
+_dbus_set_error_with_inet_sockaddr (DBusError *error,
+                                    const void *sockaddr_pointer,
+                                    size_t len,
+                                    const char *description,
+                                    int saved_errno)
+{
+  char string[INET6_ADDRSTRLEN];
+  dbus_uint16_t port;
+  const struct sockaddr *addr = sockaddr_pointer;
+
+  if (_dbus_inet_sockaddr_to_string (sockaddr_pointer, len,
+                                     string, sizeof (string), NULL, &port,
+                                     NULL))
+    {
+      dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                      "%s \"%s\" port %u: %s",
+                      description, string, port, _dbus_strerror (saved_errno));
+    }
+  else
+    {
+      dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                      "%s <address of unknown family %d>: %s",
+                      description, addr->sa_family,
+                      _dbus_strerror (saved_errno));
+    }
+}
+
 /** @} end of sysdeps */
 
 /* tests in dbus-sysdeps-util.c */

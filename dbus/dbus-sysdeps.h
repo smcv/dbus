@@ -701,6 +701,11 @@ dbus_bool_t _dbus_inet_sockaddr_to_string (const void *sockaddr_pointer,
                                            const char **family_name,
                                            dbus_uint16_t *port,
                                            DBusError *error);
+void _dbus_set_error_with_inet_sockaddr (DBusError *error,
+                                         const void *sockaddr_pointer,
+                                         size_t len,
+                                         const char *description,
+                                         int saved_errno);
 
 /** @} */
 

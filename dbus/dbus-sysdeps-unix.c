@@ -1562,9 +1562,10 @@ _dbus_listen_tcp_socket (const char     *host,
               tmp = tmp->ai_next;
               continue;
             }
-          dbus_set_error (error, _dbus_error_from_errno (saved_errno),
-                          "Failed to bind socket \"%s:%s\": %s",
-                          host ? host : "*", port, _dbus_strerror (saved_errno));
+
+          _dbus_set_error_with_inet_sockaddr (error, tmp->ai_addr, tmp->ai_addrlen,
+                                              "Failed to bind socket",
+                                              saved_errno);
           goto failed;
         }
 
@@ -1572,9 +1573,9 @@ _dbus_listen_tcp_socket (const char     *host,
         {
           saved_errno = errno;
           _dbus_close (fd, NULL);
-          dbus_set_error (error, _dbus_error_from_errno (saved_errno),
-                          "Failed to listen on socket \"%s:%s\": %s",
-                          host ? host : "*", port, _dbus_strerror (saved_errno));
+          _dbus_set_error_with_inet_sockaddr (error, tmp->ai_addr, tmp->ai_addrlen,
+                                              "Failed to listen on socket",
+                                              saved_errno);
           goto failed;
         }
 
