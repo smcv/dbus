@@ -479,6 +479,8 @@ const char* _dbus_error_from_errno (int error_number);
 DBUS_PRIVATE_EXPORT
 const char* _dbus_error_from_system_errno (void);
 
+int         _dbus_get_low_level_socket_errno         (void);
+
 int         _dbus_save_socket_errno                  (void);
 void        _dbus_restore_socket_errno               (int saved_errno);
 void        _dbus_set_errno_to_zero                  (void);

@@ -4849,4 +4849,18 @@ _dbus_logv (DBusSystemLogSeverity  severity,
     }
 }
 
+/*
+ * Return the low-level representation of a socket error, as used by
+ * cross-platform socket APIs like inet_ntop(), send() and recv(). This
+ * is the standard errno on Unix, but is WSAGetLastError() on Windows.
+ *
+ * Some libdbus internal functions copy this into errno, but with
+ * hindsight that was probably a design flaw.
+ */
+int
+_dbus_get_low_level_socket_errno (void)
+{
+  return errno;
+}
+
 /* tests in dbus-sysdeps-util.c */
