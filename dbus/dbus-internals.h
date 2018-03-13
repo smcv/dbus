@@ -366,7 +366,8 @@ typedef enum
   _DBUS_N_GLOBAL_LOCKS
 } DBusGlobalLock;
 
-dbus_bool_t _dbus_lock   (DBusGlobalLock lock) _DBUS_GNUC_WARN_UNUSED_RESULT;
+_DBUS_WARN_UNUSED_RESULT
+dbus_bool_t _dbus_lock   (DBusGlobalLock lock);
 void        _dbus_unlock (DBusGlobalLock lock);
 
 #define _DBUS_LOCK_NAME(name)           _DBUS_LOCK_##name
@@ -399,7 +400,7 @@ union DBusGUID
   char as_bytes[DBUS_UUID_LENGTH_BYTES];                /**< guid as 16 single-byte values */
 };
 
-DBUS_PRIVATE_EXPORT _DBUS_GNUC_WARN_UNUSED_RESULT
+DBUS_PRIVATE_EXPORT _DBUS_WARN_UNUSED_RESULT
 dbus_bool_t _dbus_generate_uuid  (DBusGUID         *uuid,
                                   DBusError        *error);
 DBUS_PRIVATE_EXPORT

@@ -132,18 +132,18 @@ typedef struct { SOCKET sock; } DBusSocket;
 # define DBUS_SOCKET_FORMAT "Iu"
 # define DBUS_SOCKET_INIT { INVALID_SOCKET }
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline SOCKET
 _dbus_socket_printable (DBusSocket s) { return s.sock; }
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline dbus_bool_t
 _dbus_socket_is_valid (DBusSocket s) { return s.sock != INVALID_SOCKET; }
 
 static inline void
 _dbus_socket_invalidate (DBusSocket *s) { s->sock = INVALID_SOCKET; }
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline int
 _dbus_socket_get_int (DBusSocket s) { return (int)s.sock; }
 
@@ -153,24 +153,24 @@ typedef struct { int fd; } DBusSocket;
 # define DBUS_SOCKET_FORMAT "d"
 # define DBUS_SOCKET_INIT { -1 }
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline int
 _dbus_socket_printable (DBusSocket s) { return s.fd; }
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline dbus_bool_t
 _dbus_socket_is_valid (DBusSocket s) { return s.fd >= 0; }
 
 static inline void
 _dbus_socket_invalidate (DBusSocket *s) { s->fd = -1; }
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline int
 _dbus_socket_get_int (DBusSocket s) { return s.fd; }
 
 #endif /* not DBUS_WIN */
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 static inline DBusSocket
 _dbus_socket_get_invalid (void)
 {
@@ -469,7 +469,7 @@ const char* _dbus_get_tmpdir      (void);
 /**
  * Random numbers 
  */
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 dbus_bool_t _dbus_generate_random_bytes_buffer (char       *buffer,
                                                 int         n_bytes,
                                                 DBusError  *error);

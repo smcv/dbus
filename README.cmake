@@ -165,6 +165,10 @@ x11 only:
 // Build with X11 auto launch support
 DBUS_BUILD_X11:BOOL=ON
 
+MSVC only (Visual Studio >= 2012):
+// Enable code analyzing for MSVC compiler: /analyze
+DBUS_MSVC_ANALYZE:BOOL=OFF
+
 
 Note: The above mentioned options could be extracted after 
 configuring from the output of running "<maketool> help-options" 

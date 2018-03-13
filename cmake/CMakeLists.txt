@@ -170,6 +170,7 @@ if(MSVC)
     ADD_DEFINITIONS(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
     SET(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG}   /FIconfig.h")
     SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /FIconfig.h")
+    option (DBUS_MSVC_ANALYZE "Enable code analyzing for MSVC compiler: /analyze" OFF)
 endif()
 
 #
@@ -212,6 +213,9 @@ if(MSVC)
     # 4114 same type qualifier used more than once
     # 4133 'type' : incompatible types - from 'type1' to 'type2'
     set(WARNINGS_ERRORS "4002 4003 4013 4028 4031 4047 4114 4133")
+    if(DBUS_MSVC_ANALYZE AND MSVC_VERSION GREATER 1600)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /analyze")
+    endif()
 else()
     set(WARNINGS "sign-compare")
     set(WARNINGS_DISABLED "")
@@ -588,6 +592,9 @@ message("        Docbook Generator:        ${DOCBOOK_GENERATOR_NAME}           "
 
 
 message("        gcc coverage profiling:   ${DBUS_GCOV_ENABLED}                ")
+if(MSVC)
+message("        MSVC code analyze mode:   ${DBUS_MSVC_ANALYZE}                ")
+endif()
 message("        Building unit tests:      ${DBUS_BUILD_TESTS}                 ")
 message("        Building with GLib:       ${DBUS_WITH_GLIB}                   ")
 message("        Building verbose mode:    ${DBUS_ENABLE_VERBOSE_MODE}         ")

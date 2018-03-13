@@ -10,16 +10,16 @@
 #include <dbus/dbus-internals.h>
 typedef DBusLoop TestMainContext;
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 TestMainContext *test_main_context_get            (void);
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 TestMainContext *test_main_context_try_get        (void);
 TestMainContext *test_main_context_ref            (TestMainContext *ctx);
 void             test_main_context_unref          (TestMainContext *ctx);
 void             test_main_context_iterate        (TestMainContext *ctx,
                                                    dbus_bool_t      may_block);
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 dbus_bool_t test_connection_try_setup             (TestMainContext *ctx,
                                                    DBusConnection *connection);
 void        test_connection_setup                 (TestMainContext *ctx,
@@ -27,7 +27,7 @@ void        test_connection_setup                 (TestMainContext *ctx,
 void        test_connection_shutdown              (TestMainContext *ctx,
                                                    DBusConnection *connection);
 
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 dbus_bool_t test_server_try_setup                 (TestMainContext *ctx,
                                                    DBusServer    *server);
 void        test_server_setup                     (TestMainContext *ctx,

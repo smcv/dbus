@@ -92,10 +92,24 @@
 #define DBUS_ALLOC_SIZE2(x,y)
 #endif
 
-#if    (__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4)
-#define _DBUS_GNUC_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+/** @def _DBUS_WARN_UNUSED_RESULT
+ *
+ * An attribute for functions whose result must be checked by the caller.
+ *
+ * This macro is used in function declarations. Unlike gcc-specific
+ * attributes, to avoid compilation failure with MSVC it must appear
+ * somewhere before the function name in the declaration. Our preferred
+ * coding style is to place it before the return type, for example:
+ *
+ * DBUS_PRIVATE_EXPORT _DBUS_WARN_UNUSED_RESULT
+ * dbus_bool_t _dbus_user_database_lock_system (void);
+ */
+#if     defined(_MSC_VER) && (_MSC_VER >= 1700)
+#define _DBUS_WARN_UNUSED_RESULT _Must_inspect_result_
+#elif    (__GNUC__ > 3) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4)
+#define _DBUS_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #else
-#define _DBUS_GNUC_WARN_UNUSED_RESULT
+#define _DBUS_WARN_UNUSED_RESULT
 #endif
 
 /** @def _DBUS_GNUC_PRINTF
@@ -103,9 +117,6 @@
  */
 /** @def _DBUS_GNUC_NORETURN
  * used to tell gcc about functions that never return, such as _dbus_abort()
- */
-/** @def _DBUS_GNUC_WARN_UNUSED_RESULT
- * used to tell gcc about functions whose result must be used
  */
 
 /* Normally docs are in .c files, but there isn't a .c file for this. */
