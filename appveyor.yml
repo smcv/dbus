@@ -1,0 +1,66 @@
+#============================================================================
+# Copyright © 2013-2015 OpenJK contributors
+# Copyright © 2017-2018 Collabora Ltd.
+#
+# appveyor.yml for dbus. Loosely based on OpenJK's appveyor.yml by
+# Ensiform, Anonymous Maarten and Alex Lo.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
+#============================================================================
+
+shallow_clone: true
+clone_depth: 1
+
+branches:
+  except:
+    - github-placeholder
+
+platform:
+  - Win32
+  - x64
+
+configuration:
+  - Debug
+  - Release
+
+cache: c:\tools\vcpkg\installed\ -> tools/ci-dependencies.stamp
+
+init:
+  - 'if "%Platform%"=="Win32" set "vcpkg_platform=x86"'
+  - 'if "%Platform%"=="x64" set "vcpkg_platform=x64"'
+  - 'cmake --version'
+  - 'msbuild /version'
+  - 'vcpkg install expat:%vcpkg_platform%-windows'
+  - 'vcpkg install glib:%vcpkg_platform%-windows'
+
+before_build:
+  - 'if "%Platform%"=="x64" set "CMAKE_GENERATOR=%CMAKE_GENERATOR% Win64"'
+  - 'cd %APPVEYOR_BUILD_FOLDER%'
+  - 'if exist build rmdir /q /s build'
+  - 'mkdir build'
+  - 'cd build'
+  - 'cmake -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DCMAKE_TOOLCHAIN_FILE=c:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_INSTALL_PREFIX=install -G "%CMAKE_GENERATOR%" "%APPVEYOR_BUILD_FOLDER%\\cmake"'
+
+build:
+  parallel: true
+  project: "%APPVEYOR_BUILD_FOLDER%\\build\\dbus.sln"
+  verbosity: normal
+
+after_build:
+  cmake --build . --target INSTALL --config %CONFIGURATION%
+
+environment:
+  matrix:
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      CMAKE_GENERATOR: Visual Studio 14 2015
+      VisualStudioVersion: 14.0
