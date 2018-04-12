@@ -432,6 +432,19 @@ a transport name plus possible parameters/options.</para>
   <!-- TODO: Ideally someone would write a more formal guide to
        remote D-Bus debugging, and we could link to that instead -->
 </para>
+<para>
+  Remote TCP connections were historically sometimes used to share
+  a single session bus between login sessions of the same user on
+  different machines within a trusted local area network, in
+  conjunction with unencrypted remote X11, a NFS-shared home
+  directory and NIS (YP) authentication. This is insecure against
+  an attacker on the same LAN and should be considered strongly
+  deprecated; more specifically, it is insecure in the same ways
+  and for the same reasons as unencrypted remote X11 and NFSv2/NFSv3.
+  The D-Bus maintainers
+  recommend using a separate session bus per (user, machine) pair,
+  only accessible from within that machine.
+</para>
 
 <para>Example: &lt;listen&gt;unix:path=/tmp/foo&lt;/listen&gt;</para>
 
