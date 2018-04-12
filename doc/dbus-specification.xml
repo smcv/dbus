@@ -3727,8 +3727,11 @@
       </para>
       <para>
         On Windows and most Unix platforms, the TCP stack is unable to transfer
-        credentials over a TCP connection, so the EXTERNAL authentication
-        mechanism does not work for this transport.
+        credentials over a TCP connection, so the
+        <link linkend="auth-mechanisms-external">EXTERNAL</link>
+        authentication mechanism does not work for this transport.
+        The <link linkend="auth-mechanisms-sha">DBUS_COOKIE_SHA1</link>
+        mechanism is normally used instead.
       </para>
       <para>
         Developers are sometimes tempted to use remote TCP as a debugging
