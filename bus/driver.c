@@ -239,23 +239,29 @@ static dbus_bool_t bus_driver_send_welcome_message (DBusConnection *connection,
                                                     DBusError      *error);
 
 dbus_bool_t
-bus_driver_send_service_owner_changed (const char     *service_name,
-				       const char     *old_owner,
-				       const char     *new_owner,
-				       BusTransaction *transaction,
-				       DBusError      *error)
+bus_driver_send_name_owner_changed (const char     *service_name,
+                                    DBusConnection *old_owner,
+                                    DBusConnection *new_owner,
+                                    BusTransaction *transaction,
+                                    DBusError      *error)
 {
+  const char *old_owner_name = "";
+  const char *new_owner_name = "";
   DBusMessage *message;
   dbus_bool_t retval;
-  const char *null_service;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  null_service = "";
+  if (old_owner != NULL)
+    old_owner_name = bus_connection_get_name (old_owner);
+
+  if (new_owner != NULL)
+    new_owner_name = bus_connection_get_name (new_owner);
+
   _dbus_verbose ("sending name owner changed: %s [%s -> %s]\n",
                  service_name,
-                 old_owner ? old_owner : null_service,
-                 new_owner ? new_owner : null_service);
+                 old_owner_name,
+                 new_owner_name);
 
   message = dbus_message_new_signal (DBUS_PATH_DBUS,
                                      DBUS_INTERFACE_DBUS,
@@ -272,8 +278,8 @@ bus_driver_send_service_owner_changed (const char     *service_name,
 
   if (!dbus_message_append_args (message,
                                  DBUS_TYPE_STRING, &service_name,
-                                 DBUS_TYPE_STRING, old_owner ? &old_owner : &null_service,
-                                 DBUS_TYPE_STRING, new_owner ? &new_owner : &null_service,
+                                 DBUS_TYPE_STRING, &old_owner_name,
+                                 DBUS_TYPE_STRING, &new_owner_name,
                                  DBUS_TYPE_INVALID))
     goto oom;
 

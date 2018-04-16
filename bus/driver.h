@@ -47,11 +47,11 @@ dbus_bool_t bus_driver_send_service_acquired (DBusConnection *connection,
                                               const char     *service_name,
                                               BusTransaction *transaction,
                                               DBusError      *error);
-dbus_bool_t bus_driver_send_service_owner_changed  (const char     *service_name,
-						    const char     *old_owner,
-						    const char     *new_owner,
-						    BusTransaction *transaction,
-						    DBusError      *error);
+dbus_bool_t bus_driver_send_name_owner_changed  (const char     *service_name,
+                                                 DBusConnection *old_owner,
+                                                 DBusConnection *new_owner,
+                                                 BusTransaction *transaction,
+                                                 DBusError      *error);
 dbus_bool_t bus_driver_generate_introspect_string  (DBusString *xml,
                                                     dbus_bool_t canonical_path,
                                                     DBusMessage *message);

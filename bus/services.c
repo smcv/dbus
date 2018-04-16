@@ -281,10 +281,10 @@ bus_registry_ensure (BusRegistry               *registry,
                  service_name, _dbus_string_get_const_data (service_name),
                  service->name);
 
-  if (!bus_driver_send_service_owner_changed (service->name, 
-					      NULL,
-					      bus_connection_get_name (owner_connection_if_created),
-					      transaction, error))
+  if (!bus_driver_send_name_owner_changed (service->name,
+                                           NULL,
+                                           owner_connection_if_created,
+                                           transaction, error))
     {
       bus_service_unref (service);
       return NULL;
@@ -1086,10 +1086,10 @@ bus_service_swap_owner (BusService     *service,
       new_owner = (BusOwner *)link->data;
       new_owner_conn = new_owner->conn;
 
-      if (!bus_driver_send_service_owner_changed (service->name,
- 						  bus_connection_get_name (connection),
- 						  bus_connection_get_name (new_owner_conn),
- 						  transaction, error))
+      if (!bus_driver_send_name_owner_changed (service->name,
+                                               connection,
+                                               new_owner_conn,
+                                               transaction, error))
         return FALSE;
 
       /* This will be our new owner */
@@ -1161,10 +1161,9 @@ bus_service_remove_owner (BusService     *service,
     }
   else if (_dbus_list_length_is_one (&service->owners))
     {
-      if (!bus_driver_send_service_owner_changed (service->name,
- 						  bus_connection_get_name (connection),
- 						  NULL,
- 						  transaction, error))
+      if (!bus_driver_send_name_owner_changed (service->name,
+                                               connection, NULL,
+                                               transaction, error))
         return FALSE;
     }
   else
@@ -1180,10 +1179,10 @@ bus_service_remove_owner (BusService     *service,
       new_owner = (BusOwner *)link->data;
       new_owner_conn = new_owner->conn;
 
-      if (!bus_driver_send_service_owner_changed (service->name,
- 						  bus_connection_get_name (connection),
- 						  bus_connection_get_name (new_owner_conn),
- 						  transaction, error))
+      if (!bus_driver_send_name_owner_changed (service->name,
+                                               connection,
+                                               new_owner_conn,
+                                               transaction, error))
         return FALSE;
 
       /* This will be our new owner */
