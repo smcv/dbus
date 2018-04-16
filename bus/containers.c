@@ -1119,6 +1119,23 @@ failed:
   return FALSE;
 }
 
+/*
+ * This accepts a NULL connection so that it can be used when checking
+ * whether to allow sending or receiving a message, which might involve
+ * the dbus-daemon itself as a message sender or recipient.
+ */
+static BusContainerInstance *
+connection_get_instance (DBusConnection *connection)
+{
+  if (connection == NULL)
+    return NULL;
+
+  if (contained_data_slot == -1)
+    return NULL;
+
+  return dbus_connection_get_data (connection, contained_data_slot);
+}
+
 dbus_bool_t
 bus_containers_handle_get_connection_instance (DBusConnection *caller,
                                                BusTransaction *transaction,
@@ -1154,7 +1171,7 @@ bus_containers_handle_get_connection_instance (DBusConnection *caller,
         goto failed;
     }
 
-  instance = dbus_connection_get_data (subject, contained_data_slot);
+  instance = connection_get_instance (subject);
 
   if (instance == NULL)
     {
@@ -1413,7 +1430,7 @@ bus_containers_remove_connection (BusContainers *self,
         }
     }
 
-  instance = dbus_connection_get_data (connection, contained_data_slot);
+  instance = connection_get_instance (connection);
 
   if (instance != NULL)
     {
@@ -1438,7 +1455,7 @@ bus_containers_connection_is_contained (DBusConnection *connection,
 #ifdef DBUS_ENABLE_CONTAINERS
   BusContainerInstance *instance;
 
-  instance = dbus_connection_get_data (connection, contained_data_slot);
+  instance = connection_get_instance (connection);
 
   if (instance != NULL)
     {
