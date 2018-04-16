@@ -24,6 +24,7 @@
 #include <config.h>
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
+#include "activation.h"
 #include "test.h"
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-list.h>
@@ -267,6 +268,7 @@ bus_context_new_test (const DBusString *test_data_dir,
   DBusString config_file;
   DBusString relative;
   BusContext *context;
+  BusActivation *activation;
 
   if (!_dbus_string_init (&config_file))
     {
@@ -308,6 +310,11 @@ bus_context_new_test (const DBusString *test_data_dir,
     }
 
   _dbus_string_free (&config_file);
+
+  /* Self-test: Check that all services in the BusActivation are
+   * reasonable */
+  activation = bus_context_get_activation (context);
+  bus_activation_check_services (activation);
 
   return context;
 }

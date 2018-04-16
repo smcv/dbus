@@ -442,6 +442,7 @@ in_data = \
 	data/valid-config-files-system/debug-allow-all-pass.conf.in \
 	data/valid-config-files/as-another-user.conf.in \
 	data/valid-config-files/count-fds.conf.in \
+	data/valid-config-files/debug-allow-all-fail.conf.in \
 	data/valid-config-files/debug-allow-all-sha1.conf.in \
 	data/valid-config-files/debug-allow-all.conf.in \
 	data/valid-config-files/finite-timeout.conf.in \
@@ -509,6 +510,9 @@ static_data = \
 	data/invalid-config-files/truncated-file.conf \
 	data/invalid-config-files/send-and-receive.conf \
 	data/invalid-messages/boolean-has-no-value.message-raw \
+	data/invalid-service-files/org.freedesktop.DBus.service \
+	data/invalid-service-files/org.freedesktop.DBus.TestSuiteHasUniqueName.service \
+	data/invalid-service-files/org.freedesktop.DBus.TestSuiteNotValidName.service \
 	data/sha-1/Readme.txt \
 	data/sha-1/bit-hashes.sha1 \
 	data/sha-1/bit-messages.sha1 \

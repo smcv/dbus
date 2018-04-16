@@ -130,6 +130,7 @@ set (TESTDIRS
     test/data/invalid-config-files
     test/data/invalid-config-files-system
     test/data/invalid-messages
+    test/data/invalid-service-files
     test/data/invalid-service-files-system
     test/data/equiv-config-files
     test/data/equiv-config-files/basic

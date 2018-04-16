@@ -47,6 +47,7 @@ void        bus_test_run_clients_loop (dbus_bool_t                   block);
 void        bus_test_run_everything   (BusContext                   *context);
 BusContext* bus_context_new_test      (const DBusString             *test_data_dir,
                                        const char                   *filename);
+void        bus_activation_check_services (BusActivation *self);
 
 #ifdef HAVE_UNIX_FD_PASSING
 dbus_bool_t bus_unix_fds_passing_test (const DBusString             *test_data_dir);
