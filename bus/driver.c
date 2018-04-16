@@ -608,7 +608,7 @@ bus_driver_handle_list_services (DBusConnection *connection,
       return FALSE;
     }
 
-  if (!bus_registry_list_services (registry, &services, &len))
+  if (!bus_registry_list_services (registry, &services, &len, connection))
     {
       dbus_message_unref (reply);
       BUS_SET_OOM (error);

@@ -245,7 +245,8 @@ bus_stats_handle_get_all_match_rules (DBusConnection *caller_connection,
   context = bus_transaction_get_context (transaction);
   matchmaker = bus_context_get_matchmaker (context);
 
-  if (!bus_registry_list_services (registry, &services, &services_len))
+  if (!bus_registry_list_services (registry, &services, &services_len,
+                                   caller_connection))
     return FALSE;
 
   reply = dbus_message_new_method_return (message);

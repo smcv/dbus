@@ -335,7 +335,8 @@ bus_registry_foreach (BusRegistry               *registry,
 dbus_bool_t
 bus_registry_list_services (BusRegistry *registry,
                             char      ***listp,
-                            int         *array_len)
+                            int         *array_len,
+                            DBusConnection *observer)
 {
   int i, j, len;
   char **retval;
