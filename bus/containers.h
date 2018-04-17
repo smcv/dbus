@@ -66,6 +66,31 @@ dbus_bool_t bus_containers_connection_is_contained    (DBusConnection *connectio
                                                        const char **type,
                                                        const char **name);
 
+dbus_bool_t bus_containers_check_can_activate         (DBusConnection *caller,
+                                                       const char *name,
+                                                       DBusError *error);
+dbus_bool_t bus_containers_check_can_inspect          (DBusConnection *observer,
+                                                       DBusConnection *other,
+                                                       DBusError *error);
+dbus_bool_t bus_containers_check_can_own              (DBusConnection *connection,
+                                                       const char *bus_name,
+                                                       DBusError *error);
+dbus_bool_t bus_containers_check_can_receive          (DBusConnection *sender,
+                                                       dbus_bool_t requested_reply,
+                                                       DBusConnection *proposed_recipient,
+                                                       DBusConnection *addressed_recipient,
+                                                       DBusMessage *message,
+                                                       DBusError *error);
+dbus_bool_t bus_containers_check_can_see_connection   (DBusConnection *observer,
+                                                       DBusConnection *subject);
+dbus_bool_t bus_containers_check_can_see_well_known_name (DBusConnection *observer,
+                                                          const char *name);
+dbus_bool_t bus_containers_check_can_send             (DBusConnection *sender,
+                                                       dbus_bool_t requested_reply,
+                                                       DBusConnection *proposed_recipient,
+                                                       DBusMessage *message,
+                                                       DBusError *error);
+
 static inline void
 bus_clear_containers (BusContainers **containers_p)
 {

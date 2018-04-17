@@ -238,7 +238,8 @@ bus_container_instance_emit_removed (BusContainerInstance *self)
       !bus_transaction_capture (transaction, NULL, NULL, message))
     goto oom;
 
-  if (!bus_dispatch_matches (transaction, NULL, NULL, message, &error))
+  if (!bus_dispatch_matches (transaction, NULL, NULL, message,
+                             NULL, NULL, &error))
     {
       if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
         goto oom;
@@ -1473,4 +1474,149 @@ bus_containers_connection_is_contained (DBusConnection *connection,
 #endif /* DBUS_ENABLE_CONTAINERS */
 
   return FALSE;
+}
+
+/*
+ * Return TRUE if caller can cause activation of name.
+ */
+dbus_bool_t
+bus_containers_check_can_activate (DBusConnection *caller,
+                                   const char *name,
+                                   DBusError *error)
+{
+  _dbus_assert (caller != NULL);
+  _dbus_assert (name != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  return TRUE;
+}
+
+/*
+ * Return TRUE if connection is allowed to own bus_name.
+ */
+dbus_bool_t
+bus_containers_check_can_own (DBusConnection *connection,
+                              const char *bus_name,
+                              DBusError *error)
+{
+  _dbus_assert (connection != NULL);
+  _dbus_assert (bus_name != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  return TRUE;
+}
+
+/*
+ * Return TRUE if sender is allowed to send message to
+ * proposed_recipient.
+ *
+ * sender is always non-NULL here.
+ *
+ * proposed_recipient may be NULL if the message is to be sent to the
+ * bus driver, or if we are checking whether auto-starting is allowed
+ * (as a first pass, before all details of the activated service
+ * are known). This is the same as bus_context_check_security_policy().
+ * For broadcasts, this function is called once per recipient.
+ *
+ * requested_reply indicates whether it's an expected reply to a method
+ * call from proposed_recipient to sender that was already allowed.
+ */
+dbus_bool_t
+bus_containers_check_can_send (DBusConnection *sender,
+                               dbus_bool_t requested_reply,
+                               DBusConnection *proposed_recipient,
+                               DBusMessage *message,
+                               DBusError *error)
+{
+  _dbus_assert (sender != NULL);
+  _dbus_assert (message != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  return TRUE;
+}
+
+/*
+ * Return TRUE if proposed_recipient can receive message from sender.
+ *
+ * sender may be NULL to indicate the dbus-daemon.
+ *
+ * requested_reply is the same as for check_can_send().
+ *
+ * proposed_recipient is the recipient we are considering sending to
+ * right now, which may be an eavesdropper but is never NULL.
+ * For broadcasts, this function is called once per recipient.
+ *
+ * addressed_recipient is proposed_recipient, or NULL for broadcasts,
+ * or a different connection if the proposed recipient is
+ * eavesdropping.
+ */
+dbus_bool_t
+bus_containers_check_can_receive (DBusConnection *sender,
+                                  dbus_bool_t requested_reply,
+                                  DBusConnection *proposed_recipient,
+                                  DBusConnection *addressed_recipient,
+                                  DBusMessage *message,
+                                  DBusError *error)
+{
+  _dbus_assert (proposed_recipient != NULL);
+  _dbus_assert (message != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  return TRUE;
+}
+
+/*
+ * Return TRUE if observer can see name.
+ *
+ * This doesn't have a DBusError, because on error we must always
+ * behave as though the name didn't exist, to avoid leaking
+ * information.
+ */
+dbus_bool_t
+bus_containers_check_can_see_well_known_name (DBusConnection *observer,
+                                              const char *name)
+{
+  _dbus_assert (observer != NULL);
+  _dbus_assert (name != NULL);
+  _dbus_assert (name[0] != ':');
+
+  return TRUE;
+}
+
+/*
+ * Return TRUE if observer can see subject.
+ *
+ * This doesn't have a DBusError, because on error we must always
+ * behave as though the name didn't exist, to avoid leaking
+ * information.
+ */
+dbus_bool_t
+bus_containers_check_can_see_connection (DBusConnection *observer,
+                                         DBusConnection *subject)
+{
+  _dbus_assert (observer != NULL);
+  _dbus_assert (subject != NULL);
+
+  return TRUE;
+}
+
+/*
+ * Return TRUE if observer can retrieve various sorts of information
+ * (credentials etc.) about other. other may be NULL to denote the
+ * dbus-daemon itself.
+ *
+ * To avoid leaking information about the existence or nonexistence of
+ * names, this should not be called unless one of the
+ * bus_containers_check_can_see_*() functions has already succeeded for
+ * the name or connection in question.
+ */
+dbus_bool_t
+bus_containers_check_can_inspect (DBusConnection *observer,
+                                  DBusConnection *other,
+                                  DBusError *error)
+{
+  _dbus_assert (observer != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  return TRUE;
 }

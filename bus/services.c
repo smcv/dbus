@@ -28,6 +28,7 @@
 #include <dbus/dbus-mempool.h>
 #include <dbus/dbus-marshal-validate.h>
 
+#include "containers.h"
 #include "driver.h"
 #include "services.h"
 #include "connection.h"
@@ -354,6 +355,26 @@ bus_registry_list_services (BusRegistry *registry,
     {
       BusService *service = _dbus_hash_iter_get_value (&iter);
 
+      /* Skip the ones the observer is not allowed to know about */
+      if (observer != NULL)
+        {
+
+          if (service->name[0] == ':')
+            {
+              DBusConnection *owner;
+
+              owner = bus_service_get_primary_owners_connection (service);
+
+              if (!bus_containers_check_can_see_connection (observer, owner))
+                continue;
+            }
+          else if (!bus_containers_check_can_see_well_known_name (observer,
+                                                                  service->name))
+            {
+              continue;
+            }
+        }
+
       retval[i] = _dbus_strdup (service->name);
       if (retval[i] == NULL)
 	goto error;
@@ -364,7 +385,7 @@ bus_registry_list_services (BusRegistry *registry,
   retval[i] = NULL;
   
   if (array_len)
-    *array_len = len;
+    *array_len = i;
   
   *listp = retval;
   return TRUE;
@@ -433,6 +454,11 @@ bus_registry_acquire_service (BusRegistry      *registry,
                       DBUS_SERVICE_DBUS);
       goto out;
     }
+
+  if (!bus_containers_check_can_own (connection,
+                                     _dbus_string_get_const_data (service_name),
+                                     error))
+    goto out;
 
   policy = bus_connection_get_policy (connection);
   _dbus_assert (policy != NULL);
@@ -664,6 +690,14 @@ bus_registry_release_service (BusRegistry      *registry,
 
       goto out;
     }
+
+  /* Check whether we would be allowed to own the name before we try
+   * releasing it, so that contained apps can't use the reply from this
+   * method as an oracle to determine whether someone else owns it. */
+  if (!bus_containers_check_can_own (connection,
+                                     _dbus_string_get_const_data (service_name),
+                                     error))
+    goto out;
 
   service = bus_registry_lookup (registry, service_name);
 

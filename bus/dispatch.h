@@ -33,6 +33,8 @@ dbus_bool_t bus_dispatch_matches           (BusTransaction *transaction,
                                             DBusConnection *sender,
                                             DBusConnection *recipient,
                                             DBusMessage    *message,
+                                            DBusConnection *needs_to_see_conn,
+                                            const char     *needs_to_see_well_known_name,
                                             DBusError      *error);
 
 #endif /* BUS_DISPATCH_H */

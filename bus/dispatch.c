@@ -26,6 +26,7 @@
 #include <config.h>
 #include "dispatch.h"
 #include "connection.h"
+#include "containers.h"
 #include "driver.h"
 #include "services.h"
 #include "activation.h"
@@ -63,9 +64,31 @@ send_one_message (DBusConnection *connection,
                   DBusConnection *addressed_recipient,
                   DBusMessage    *message,
                   BusTransaction *transaction,
+                  DBusConnection *needs_to_see_conn,
+                  const char     *needs_to_see_well_known_name,
                   DBusError      *error)
 {
   DBusError stack_error = DBUS_ERROR_INIT;
+
+  if (needs_to_see_conn != NULL &&
+      !bus_containers_check_can_see_connection (connection,
+                                                needs_to_see_conn))
+    {
+      /* This broadcast is about a connection that is invisible to this
+       * recipient. Don't send it, but don't set or return an
+       * error either. */
+      return TRUE;
+    }
+
+  if (needs_to_see_well_known_name != NULL &&
+      !bus_containers_check_can_see_well_known_name (connection,
+                                                     needs_to_see_well_known_name))
+    {
+      /* This broadcast is about a well-known name that is invisible to this
+       * recipient. Don't send it, but don't set or return an
+       * error either. */
+      return TRUE;
+    }
 
   if (!bus_context_check_security_policy (context, transaction,
                                           sender,
@@ -122,6 +145,8 @@ bus_dispatch_matches (BusTransaction *transaction,
                       DBusConnection *sender,
                       DBusConnection *addressed_recipient,
                       DBusMessage    *message,
+                      DBusConnection *needs_to_see_conn,
+                      const char     *needs_to_see_well_known_name,
                       DBusError      *error)
 {
   DBusError tmp_error;
@@ -130,6 +155,11 @@ bus_dispatch_matches (BusTransaction *transaction,
   BusMatchmaker *matchmaker;
   DBusList *link;
   BusContext *context;
+
+  /* needs_to_see is only for broadcasts */
+  _dbus_assert (addressed_recipient == NULL || needs_to_see_conn == NULL);
+  _dbus_assert (addressed_recipient == NULL ||
+                needs_to_see_well_known_name == NULL);
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -145,6 +175,11 @@ bus_dispatch_matches (BusTransaction *transaction,
   /* First, send the message to the addressed_recipient, if there is one. */
   if (addressed_recipient != NULL)
     {
+      /* We don't need to check these because they only make sense for
+       * broadcasts */
+      _dbus_assert (needs_to_see_conn == NULL);
+      _dbus_assert (needs_to_see_well_known_name == NULL);
+
       if (!bus_context_check_security_policy (context, transaction,
                                               sender, addressed_recipient,
                                               addressed_recipient,
@@ -193,7 +228,8 @@ bus_dispatch_matches (BusTransaction *transaction,
       dest = link->data;
 
       if (!send_one_message (dest, context, sender, addressed_recipient,
-                             message, transaction, &tmp_error))
+                             message, transaction, needs_to_see_conn,
+                             needs_to_see_well_known_name, &tmp_error))
         break;
 
       link = _dbus_list_get_next_link (&recipients, link);
@@ -497,7 +533,8 @@ bus_dispatch (DBusConnection *connection,
    * addressed_recipient == NULL), and match it against other connections'
    * match rules.
    */
-  if (!bus_dispatch_matches (transaction, connection, addressed_recipient, message, &error))
+  if (!bus_dispatch_matches (transaction, connection, addressed_recipient,
+                             message, NULL, NULL, &error))
     goto out;
 
  out:

@@ -1674,6 +1674,12 @@ bus_context_check_security_policy (BusContext     *context,
           sender_policy = NULL;
         }
 
+      if (!bus_containers_check_can_send (sender,
+                                          requested_reply,
+                                          proposed_recipient,
+                                          message, error))
+        return FALSE;
+
       /* First verify the SELinux access controls.  If allowed then
        * go on with the standard checks.
        */
@@ -1787,6 +1793,15 @@ bus_context_check_security_policy (BusContext     *context,
   _dbus_assert ((proposed_recipient != NULL && recipient_policy != NULL) ||
                 (proposed_recipient != NULL && sender == NULL && recipient_policy == NULL) ||
                 (proposed_recipient == NULL && recipient_policy == NULL));
+
+  if (proposed_recipient != NULL &&
+      !bus_containers_check_can_receive (sender,
+                                         requested_reply,
+                                         proposed_recipient,
+                                         addressed_recipient,
+                                         message,
+                                         error))
+    return FALSE;
 
   log = FALSE;
   if (sender_policy &&
