@@ -1469,6 +1469,7 @@ bus_driver_handle_get_service_owner (DBusConnection *connection,
   BusRegistry *registry;
   BusService *service;
   DBusMessage *reply;
+  DBusConnection *owner;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -1482,35 +1483,44 @@ bus_driver_handle_get_service_owner (DBusConnection *connection,
 			       DBUS_TYPE_INVALID))
       goto failed;
 
-  _dbus_string_init_const (&str, text);
-  service = bus_registry_lookup (registry, &str);
-  if (service == NULL &&
-      _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
+  if (strcmp (text, DBUS_SERVICE_DBUS) == 0)
     {
       /* DBUS_SERVICE_DBUS owns itself */
       base_name = DBUS_SERVICE_DBUS;
-    }
-  else if (service == NULL)
-    {
-      dbus_set_error (error,
-                      DBUS_ERROR_NAME_HAS_NO_OWNER,
-                      "Could not get owner of name '%s': no such name", text);
-      goto failed;
-    }
-  else
-    {
-      base_name = bus_connection_get_name (bus_service_get_primary_owners_connection (service));
-      if (base_name == NULL)
-        {
-          /* FIXME - how is this error possible? */
-          dbus_set_error (error,
-                          DBUS_ERROR_FAILED,
-                          "Could not determine unique name for '%s'", text);
-          goto failed;
-        }
-      _dbus_assert (*base_name == ':');
+      goto success;
     }
 
+  _dbus_string_init_const (&str, text);
+
+  if (!_dbus_validate_bus_name (&str, 0, _dbus_string_get_length (&str)))
+    {
+      /* We return NameHasNoOwner rather than InvalidArgs because
+       * either way, it has no owner */
+      dbus_set_error (error, DBUS_ERROR_NAME_HAS_NO_OWNER,
+                      "Requested bus name \"%s\" is not valid",
+                      _dbus_string_get_const_data (&str));
+      goto failed;
+    }
+
+  service = bus_registry_lookup (registry, &str);
+
+  if (service == NULL)
+    goto invisible;
+
+  owner = bus_service_get_primary_owners_connection (service);
+
+  base_name = bus_connection_get_name (owner);
+  if (base_name == NULL)
+    {
+      /* FIXME - how is this error possible? */
+      dbus_set_error (error,
+                      DBUS_ERROR_FAILED,
+                      "Could not determine unique name for '%s'", text);
+      goto failed;
+    }
+  _dbus_assert (*base_name == ':');
+
+ success:
   _dbus_assert (base_name != NULL);
 
   reply = dbus_message_new_method_return (message);
@@ -1537,6 +1547,15 @@ bus_driver_handle_get_service_owner (DBusConnection *connection,
   if (reply)
     dbus_message_unref (reply);
   return FALSE;
+
+ invisible:
+  /* We must make sure to use the same error message for names that
+   * really don't exist, and names that exist but we're not allowed
+   * to know that. */
+  dbus_set_error (error,
+                  DBUS_ERROR_NAME_HAS_NO_OWNER,
+                  "Could not get owner of name '%s': no such name", text);
+  goto failed;
 }
 
 static dbus_bool_t
@@ -1569,21 +1588,21 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
 			       DBUS_TYPE_INVALID))
       goto failed;
 
-  _dbus_string_init_const (&str, text);
-  service = bus_registry_lookup (registry, &str);
-  if (service == NULL &&
-      _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
+  if (strcmp (text, DBUS_SERVICE_DBUS) == 0)
     {
       /* DBUS_SERVICE_DBUS owns itself */
       if (! _dbus_list_append (&base_names, (char *) dbus_service_name))
         goto oom;
+
+      goto success;
     }
-  else if (service == NULL)
+
+  _dbus_string_init_const (&str, text);
+  service = bus_registry_lookup (registry, &str);
+
+  if (service == NULL)
     {
-      dbus_set_error (error,
-                      DBUS_ERROR_NAME_HAS_NO_OWNER,
-                      "Could not get owners of name '%s': no such name", text);
-      goto failed;
+      goto invisible;
     }
   else
     {
@@ -1594,6 +1613,7 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
         }
     }
 
+ success:
   _dbus_assert (base_names != NULL);
 
   reply = dbus_message_new_method_return (message);
@@ -1646,6 +1666,15 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
     _dbus_list_clear (&base_names);
 
   return FALSE;
+
+ invisible:
+  /* We must make sure to use the same error message for names that
+   * really don't exist, and names that exist but we're not allowed
+   * to know that. */
+  dbus_set_error (error,
+                  DBUS_ERROR_NAME_HAS_NO_OWNER,
+                  "Could not get owners of name '%s': no such name", text);
+  goto failed;
 }
 
 static dbus_bool_t
