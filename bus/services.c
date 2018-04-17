@@ -1289,8 +1289,7 @@ bus_service_has_owner (BusService     *service,
 
 dbus_bool_t 
 bus_service_list_queued_owners (BusService *service,
-                                DBusList  **return_list,
-                                DBusError  *error)
+                                DBusList  **return_list)
 {
   DBusList *link;
 
@@ -1317,6 +1316,5 @@ bus_service_list_queued_owners (BusService *service,
   
  oom:
   _dbus_list_clear (return_list);
-  BUS_SET_OOM (error);
   return FALSE;
 }

@@ -87,8 +87,7 @@ BusOwner*       bus_service_get_primary_owner         (BusService     *service);
 dbus_bool_t     bus_service_get_allow_replacement     (BusService     *service);
 const char*     bus_service_get_name                  (BusService     *service);
 dbus_bool_t     bus_service_list_queued_owners        (BusService *service,
-                                                       DBusList  **return_list,
-                                                       DBusError  *error);
+                                                       DBusList  **return_list);
 
 DBusConnection* bus_service_get_primary_owners_connection (BusService     *service);
 #endif /* BUS_SERVICES_H */

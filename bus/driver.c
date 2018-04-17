@@ -1581,10 +1581,11 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
     }
   else
     {
-      if (!bus_service_list_queued_owners (service,
-                                           &base_names,
-                                           error))
-        goto failed;
+      if (!bus_service_list_queued_owners (service, &base_names))
+        {
+          BUS_SET_OOM (error);
+          goto failed;
+        }
     }
 
   _dbus_assert (base_names != NULL);
