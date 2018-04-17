@@ -1481,7 +1481,7 @@ bus_driver_handle_get_service_owner (DBusConnection *connection,
   if (service == NULL &&
       _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
     {
-      /* ORG_FREEDESKTOP_DBUS owns itself */
+      /* DBUS_SERVICE_DBUS owns itself */
       base_name = DBUS_SERVICE_DBUS;
     }
   else if (service == NULL)
@@ -1568,7 +1568,7 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
   if (service == NULL &&
       _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
     {
-      /* ORG_FREEDESKTOP_DBUS owns itself */
+      /* DBUS_SERVICE_DBUS owns itself */
       if (! _dbus_list_append (&base_names, (char *) dbus_service_name))
         goto oom;
     }
