@@ -52,14 +52,14 @@ nonnull (const char *maybe_null,
 }
 
 static DBusConnection *
-bus_driver_get_owner_of_name (DBusConnection *connection,
+bus_driver_get_owner_of_name (DBusConnection *observer,
                               const char     *name)
 {
   BusRegistry *registry;
   BusService *serv;
   DBusString str;
 
-  registry = bus_connection_get_registry (connection);
+  registry = bus_connection_get_registry (observer);
   _dbus_string_init_const (&str, name);
   serv = bus_registry_lookup (registry, &str);
 
