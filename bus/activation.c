@@ -1789,6 +1789,21 @@ child_setup (void *user_data)
 }
 
 
+/*
+ * Try to activate the given service.
+ *
+ * connection is the connection requesting that the service be started,
+ * or NULL if the activation was caused by the dbus-daemon itself (when
+ * systemd activation waits for systemd to connect to us, or when calling
+ * SetEnvironment on systemd).
+ *
+ * auto_activation is TRUE if we are carrying out auto-starting (we are
+ * activating a service automatically in order to deliver a message to it)
+ * or FALSE if we are starting the service explicitly (as for
+ * StartServiceByName).
+ *
+ * activation_message is the message that caused this activation.
+ */
 dbus_bool_t
 bus_activation_activate_service (BusActivation  *activation,
                                  DBusConnection *connection,
@@ -1814,6 +1829,10 @@ bus_activation_activate_service (BusActivation  *activation,
   int limit;
   DBusSpawnFlags flags = DBUS_SPAWN_NONE;
 
+  _dbus_assert (activation != NULL);
+  _dbus_assert (transaction != NULL);
+  _dbus_assert (activation_message != NULL);
+  _dbus_assert (service_name != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
   limit = bus_context_get_max_pending_activations (activation->context);
