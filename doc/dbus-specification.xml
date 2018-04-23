@@ -3729,7 +3729,10 @@
         On Windows and most Unix platforms, the TCP stack is unable to transfer
         credentials over a TCP connection, so the
         <link linkend="auth-mechanisms-external">EXTERNAL</link>
-        authentication mechanism does not work for this transport.
+        authentication mechanism does not normally work for this transport
+        (although the reference implementation of D-Bus is able to identify
+        loopback TCPv4 connections on Windows by their port number,
+        partially enabling the EXTERNAL mechanism).
         The <link linkend="auth-mechanisms-sha">DBUS_COOKIE_SHA1</link>
         mechanism is normally used instead.
       </para>
