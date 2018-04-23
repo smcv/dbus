@@ -3817,7 +3817,7 @@
       </sect3>
     </sect2>
     <sect2 id="transports-nonce-tcp-sockets">
-      <title>Nonce-secured TCP Sockets</title>
+      <title>Nonce-authenticated TCP Sockets</title>
       <para>
         The nonce-tcp transport provides a modified TCP transport using a
         simple authentication mechanism, to ensure that only clients with read
