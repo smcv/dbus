@@ -1594,9 +1594,39 @@ bus_containers_check_can_send (DBusConnection *sender,
                                DBusMessage *message,
                                DBusError *error)
 {
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+  int type;
+#endif
+
   _dbus_assert (sender != NULL);
   _dbus_assert (message != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  instance = connection_get_instance (sender);
+
+  if (instance == NULL)
+    return TRUE;
+
+  /* We don't allow unsolicited replies even if the container has no
+   * particular policy. */
+  type = dbus_message_get_type (message);
+
+  if (type == DBUS_MESSAGE_TYPE_METHOD_RETURN ||
+      type == DBUS_MESSAGE_TYPE_ERROR)
+    {
+      if (!requested_reply)
+        {
+          dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                          "Connection \"%s\" (%s) is in a container that is "
+                          "not allowed to send unsolicited replies",
+                          bus_connection_get_name (sender),
+                          bus_connection_get_loginfo (sender));
+          return FALSE;
+        }
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
 
   return TRUE;
 }
