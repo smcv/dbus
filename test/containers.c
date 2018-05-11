@@ -174,6 +174,27 @@ fixture_disconnect_unconfined (Fixture *f)
 }
 
 static void
+fixture_disconnect_observer (Fixture *f)
+{
+  if (f->observer_conn != NULL)
+    {
+      GError *error = NULL;
+
+      g_dbus_connection_signal_unsubscribe (f->observer_conn,
+                                            f->removed_sub);
+
+      g_dbus_connection_close_sync (f->observer_conn, NULL, &error);
+
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+        g_clear_error (&error);
+      else
+        g_assert_no_error (error);
+    }
+
+  g_clear_object (&f->observer_conn);
+}
+
+static void
 setup (Fixture *f,
        gconstpointer context)
 {
@@ -1590,22 +1611,8 @@ teardown (Fixture *f,
 {
   g_clear_object (&f->proxy);
 
-  if (f->observer_conn != NULL)
-    {
-      GError *error = NULL;
-
-      g_dbus_connection_signal_unsubscribe (f->observer_conn,
-                                            f->removed_sub);
-      g_dbus_connection_close_sync (f->observer_conn, NULL, &error);
-
-      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
-        g_clear_error (&error);
-      else
-        g_assert_no_error (error);
-    }
-
+  fixture_disconnect_observer (f);
   g_clear_pointer (&f->containers_removed, g_hash_table_unref);
-  g_clear_object (&f->observer_conn);
 
   if (f->libdbus_observer != NULL)
     {
