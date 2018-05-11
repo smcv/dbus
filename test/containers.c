@@ -1,6 +1,6 @@
 /* Integration tests for restricted sockets for containers
  *
- * Copyright © 2017 Collabora Ltd.
+ * Copyright © 2017-2018 Collabora Ltd.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -153,6 +153,24 @@ instance_removed_cb (GDBusConnection *observer,
   g_variant_get (parameters, "(&o)", &container);
   g_assert (!g_hash_table_contains (f->containers_removed, container));
   g_hash_table_add (f->containers_removed, g_strdup (container));
+}
+
+static void
+fixture_disconnect_unconfined (Fixture *f)
+{
+  if (f->unconfined_conn != NULL)
+    {
+      GError *error = NULL;
+
+      g_dbus_connection_close_sync (f->unconfined_conn, NULL, &error);
+
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+        g_clear_error (&error);
+      else
+        g_assert_no_error (error);
+    }
+
+  g_clear_object (&f->unconfined_conn);
 }
 
 static void
@@ -851,8 +869,7 @@ test_stop_server (Fixture *f,
                                                      NULL,
                                                      name_gone_set_boolean_cb,
                                                      &gone, NULL);
-        g_dbus_connection_close_sync (f->unconfined_conn, NULL, &f->error);
-        g_assert_no_error (f->error);
+        fixture_disconnect_unconfined (f);
 
         g_test_message ("Waiting for container manager bus name to disappear...");
 
@@ -1599,19 +1616,7 @@ teardown (Fixture *f,
 
   dbus_clear_connection (&f->libdbus_observer);
 
-  if (f->unconfined_conn != NULL)
-    {
-      GError *error = NULL;
-
-      g_dbus_connection_close_sync (f->unconfined_conn, NULL, &error);
-
-      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
-        g_clear_error (&error);
-      else
-        g_assert_no_error (error);
-    }
-
-  g_clear_object (&f->unconfined_conn);
+  fixture_disconnect_unconfined (f);
 
   if (f->confined_conn != NULL)
     {
