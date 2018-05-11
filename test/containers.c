@@ -60,7 +60,8 @@ typedef struct {
     gchar *socket_dbus_address;
     GDBusConnection *unconfined_conn;
     gchar *unconfined_unique_name;
-    GDBusConnection *confined_conn;
+    GDBusConnection *confined_conns[2];
+    gchar *confined_unique_names[2];
 
     GDBusConnection *observer_conn;
     GDBusProxy *observer_proxy;
@@ -193,6 +194,48 @@ fixture_disconnect_observer (Fixture *f)
     }
 
   g_clear_object (&f->observer_conn);
+}
+
+#ifdef HAVE_CONTAINERS_TEST
+static void
+fixture_connect_confined (Fixture *f,
+                          guint i)
+{
+  GError *error = NULL;
+
+  g_assert_cmpuint (i, <, G_N_ELEMENTS (f->confined_conns));
+  g_assert_cmpuint (i, <, G_N_ELEMENTS (f->confined_unique_names));
+
+  g_test_message ("Connecting to %s...", f->socket_dbus_address);
+  f->confined_conns[i] = g_dbus_connection_new_for_address_sync (
+      f->socket_dbus_address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, &error);
+  g_assert_no_error (error);
+
+  f->confined_unique_names[i] = g_strdup (
+      g_dbus_connection_get_unique_name (f->confined_conns[i]));
+}
+#endif
+
+static void
+fixture_disconnect_confined (Fixture *f,
+                             guint i)
+{
+  if (f->confined_conns[i] != NULL)
+    {
+      GError *error = NULL;
+
+      g_dbus_connection_close_sync (f->confined_conns[i], NULL, &error);
+
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+        g_clear_error (&error);
+      else
+        g_assert_no_error (error);
+    }
+
+  g_clear_object (&f->confined_conns[i]);
 }
 
 static void
@@ -375,7 +418,6 @@ test_basic (Fixture *f,
   GVariant *creator;
   GVariant *parameters;
   GVariantDict dict;
-  const gchar *confined_unique_name;
   const gchar *path_from_query;
   const gchar *name;
   const gchar *name_owner;
@@ -398,16 +440,10 @@ test_basic (Fixture *f,
   if (!add_container_server (f, g_steal_pointer (&parameters)))
     return;
 
-  g_test_message ("Connecting to %s...", f->socket_dbus_address);
-  f->confined_conn = g_dbus_connection_new_for_address_sync (
-      f->socket_dbus_address,
-      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
-       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
-      NULL, NULL, &f->error);
-  g_assert_no_error (f->error);
+  fixture_connect_confined (f, 0);
 
   g_test_message ("Making a method call from confined app...");
-  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+  tuple = g_dbus_connection_call_sync (f->confined_conns[0], DBUS_SERVICE_DBUS,
                                        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
                                        "GetNameOwner",
                                        g_variant_new ("(s)", DBUS_SERVICE_DBUS),
@@ -422,7 +458,7 @@ test_basic (Fixture *f,
   g_clear_pointer (&tuple, g_variant_unref);
 
   g_test_message ("Making a method call from confined app to unconfined...");
-  tuple = g_dbus_connection_call_sync (f->confined_conn,
+  tuple = g_dbus_connection_call_sync (f->confined_conns[0],
                                        f->unconfined_unique_name,
                                        "/", DBUS_INTERFACE_PEER,
                                        "Ping",
@@ -435,7 +471,7 @@ test_basic (Fixture *f,
   g_clear_pointer (&tuple, g_variant_unref);
 
   g_test_message ("Receiving signals without requesting extra headers");
-  g_dbus_connection_emit_signal (f->confined_conn, NULL, "/",
+  g_dbus_connection_emit_signal (f->confined_conns[0], NULL, "/",
                                  "com.example.Shouting", "Shouted",
                                  NULL, NULL);
 
@@ -474,7 +510,7 @@ test_basic (Fixture *f,
   dbus_clear_message (&libdbus_message);
   dbus_clear_message (&libdbus_reply);
 
-  g_dbus_connection_emit_signal (f->confined_conn, NULL, "/",
+  g_dbus_connection_emit_signal (f->confined_conns[0], NULL, "/",
                                  "com.example.Shouting", "Shouted",
                                  NULL, NULL);
 
@@ -497,7 +533,7 @@ test_basic (Fixture *f,
   dbus_clear_message (&f->latest_shout);
 
   g_test_message ("Checking that confined app is not considered privileged...");
-  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+  tuple = g_dbus_connection_call_sync (f->confined_conns[0], DBUS_SERVICE_DBUS,
                                        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
                                        "UpdateActivationEnvironment",
                                        g_variant_new ("(a{ss})", NULL),
@@ -510,9 +546,11 @@ test_basic (Fixture *f,
   g_assert_null (tuple);
 
   g_test_message ("Inspecting connection container info");
-  confined_unique_name = g_dbus_connection_get_unique_name (f->confined_conn);
+  f->confined_unique_names[0] = g_strdup (
+      g_dbus_connection_get_unique_name (f->confined_conns[0]));
   tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
-                                  g_variant_new ("(s)", confined_unique_name),
+                                  g_variant_new ("(s)",
+                                                 f->confined_unique_names[0]),
                                   G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
   g_assert_no_error (f->error);
   g_assert_nonnull (tuple);
@@ -590,9 +628,9 @@ test_wrong_uid (Fixture *f,
     return;
 
   g_test_message ("Connecting to %s...", f->socket_dbus_address);
-  f->confined_conn = test_try_connect_gdbus_as_user (f->socket_dbus_address,
-                                                     TEST_USER_OTHER,
-                                                     &f->error);
+  f->confined_conns[0] = test_try_connect_gdbus_as_user (f->socket_dbus_address,
+                                                         TEST_USER_OTHER,
+                                                         &f->error);
 
   /* That might be skipped if we can't become TEST_USER_OTHER */
   if (f->error != NULL &&
@@ -624,7 +662,6 @@ test_metadata (Fixture *f,
   GVariant *tuple;
   GVariant *parameters;
   GVariantDict dict;
-  const gchar *confined_unique_name;
   const gchar *path_from_query;
   const gchar *name;
   const gchar *type;
@@ -650,21 +687,14 @@ test_metadata (Fixture *f,
   if (!add_container_server (f, g_steal_pointer (&parameters)))
     return;
 
-  g_test_message ("Connecting to %s...", f->socket_dbus_address);
-  f->confined_conn = g_dbus_connection_new_for_address_sync (
-      f->socket_dbus_address,
-      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
-       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
-      NULL, NULL, &f->error);
-  g_assert_no_error (f->error);
+  fixture_connect_confined (f, 0);
 
   g_test_message ("Inspecting connection credentials...");
-  confined_unique_name = g_dbus_connection_get_unique_name (f->confined_conn);
-  tuple = g_dbus_connection_call_sync (f->confined_conn, DBUS_SERVICE_DBUS,
+  tuple = g_dbus_connection_call_sync (f->confined_conns[0], DBUS_SERVICE_DBUS,
                                        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
                                        "GetConnectionCredentials",
-                                       g_variant_new ("(s)",
-                                                      confined_unique_name),
+                                       g_variant_new (
+                                           "(s)", f->confined_unique_names[0]),
                                        G_VARIANT_TYPE ("(a{sv})"),
                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL,
                                        &f->error);
@@ -683,7 +713,8 @@ test_metadata (Fixture *f,
 
   g_test_message ("Inspecting connection container info");
   tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
-                                  g_variant_new ("(s)", confined_unique_name),
+                                  g_variant_new (
+                                      "(s)", f->confined_unique_names[0]),
                                   G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
   g_assert_no_error (f->error);
   g_assert_nonnull (tuple);
@@ -769,7 +800,6 @@ test_stop_server (Fixture *f,
   GVariant *tuple;
   GVariant *parameters;
   gchar *error_name;
-  const gchar *confined_unique_name;
   const gchar *name_owner;
   gboolean gone = FALSE;
   guint name_watch;
@@ -800,28 +830,19 @@ test_stop_server (Fixture *f,
 
   if (config->stop_server != STOP_SERVER_NEVER_CONNECTED)
     {
-      g_test_message ("Connecting to %s...", f->socket_dbus_address);
-      f->confined_conn = g_dbus_connection_new_for_address_sync (
-          f->socket_dbus_address,
-          (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
-           G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
-          NULL, NULL, &f->error);
-      g_assert_no_error (f->error);
+      fixture_connect_confined (f, 0);
 
       if (config->stop_server == STOP_SERVER_DISCONNECT_FIRST)
         {
           g_test_message ("Disconnecting confined connection...");
           gone = FALSE;
-          confined_unique_name = g_dbus_connection_get_unique_name (
-              f->confined_conn);
           name_watch = g_bus_watch_name_on_connection (f->observer_conn,
-                                                       confined_unique_name,
+                                                       f->confined_unique_names[0],
                                                        G_BUS_NAME_WATCHER_FLAGS_NONE,
                                                        NULL,
                                                        name_gone_set_boolean_cb,
                                                        &gone, NULL);
-          g_dbus_connection_close_sync (f->confined_conn, NULL, &f->error);
-          g_assert_no_error (f->error);
+          fixture_disconnect_confined (f, 0);
 
           g_test_message ("Waiting for confined app bus name to disappear...");
 
@@ -886,7 +907,7 @@ test_stop_server (Fixture *f,
         /* Close the unconfined connection (the container manager) and wait
          * for it to go away */
         g_test_message ("Closing container manager...");
-        name_watch = g_bus_watch_name_on_connection (f->confined_conn,
+        name_watch = g_bus_watch_name_on_connection (f->confined_conns[0],
                                                      f->unconfined_unique_name,
                                                      G_BUS_NAME_WATCHER_FLAGS_NONE,
                                                      NULL,
@@ -1013,7 +1034,7 @@ test_stop_server (Fixture *f,
       case STOP_SERVER_FORCE:
         g_test_message ("Checking that the confined app gets disconnected...");
 
-        while (!g_dbus_connection_is_closed (f->confined_conn))
+        while (!g_dbus_connection_is_closed (f->confined_conns[0]))
           g_main_context_iteration (NULL, TRUE);
         break;
 
@@ -1025,7 +1046,7 @@ test_stop_server (Fixture *f,
       case STOP_SERVER_EXPLICITLY:
       case STOP_SERVER_WITH_MANAGER:
         g_test_message ("Checking that the confined app still works...");
-        tuple = g_dbus_connection_call_sync (f->confined_conn,
+        tuple = g_dbus_connection_call_sync (f->confined_conns[0],
                                              DBUS_SERVICE_DBUS,
                                              DBUS_PATH_DBUS,
                                              DBUS_INTERFACE_DBUS,
@@ -1055,8 +1076,7 @@ test_stop_server (Fixture *f,
         /* Now disconnect the last confined connection, which will make the
          * container instance go away */
         g_test_message ("Closing confined connection...");
-        g_dbus_connection_close_sync (f->confined_conn, NULL, &f->error);
-        g_assert_no_error (f->error);
+        fixture_disconnect_confined (f, 0);
         break;
 
       default:
@@ -1268,16 +1288,10 @@ test_invalid_nesting (Fixture *f,
   if (!add_container_server (f, g_steal_pointer (&parameters)))
     return;
 
-  g_test_message ("Connecting to %s...", f->socket_dbus_address);
-  f->confined_conn = g_dbus_connection_new_for_address_sync (
-      f->socket_dbus_address,
-      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
-       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
-      NULL, NULL, &f->error);
-  g_assert_no_error (f->error);
+  fixture_connect_confined (f, 0);
 
   g_test_message ("Checking that confined app cannot nest containers...");
-  nested_proxy = g_dbus_proxy_new_sync (f->confined_conn,
+  nested_proxy = g_dbus_proxy_new_sync (f->confined_conns[0],
                                         G_DBUS_PROXY_FLAGS_NONE, NULL,
                                         DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
                                         DBUS_INTERFACE_CONTAINERS1, NULL,
@@ -1486,7 +1500,7 @@ test_max_connections_per_container (Fixture *f,
    * capacity now */
   for (i = 0; i < G_N_ELEMENTS (socket_paths); i++)
     {
-      f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->confined_conns[0] = g_dbus_connection_new_for_address_sync (
           dbus_addresses[i],
           (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
            G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
@@ -1494,7 +1508,7 @@ test_max_connections_per_container (Fixture *f,
       assert_connection_closed (f->error);
 
       g_clear_error (&f->error);
-      g_assert_null (f->confined_conn);
+      g_assert_null (f->confined_conns[0]);
     }
 
   /* Free up one slot (this happens to be connected to socket_paths[0]) */
@@ -1503,20 +1517,20 @@ test_max_connections_per_container (Fixture *f,
 
   /* Now we can connect, but only once. Use a retry loop since the dbus-daemon
    * won't necessarily notice our socket closing synchronously. */
-  while (f->confined_conn == NULL)
+  while (f->confined_conns[0] == NULL)
     {
       g_test_message ("Trying to use the slot we just freed up...");
-      f->confined_conn = g_dbus_connection_new_for_address_sync (
+      f->confined_conns[0] = g_dbus_connection_new_for_address_sync (
           dbus_addresses[0],
           (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
            G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
           NULL, NULL, &f->error);
 
-      if (f->confined_conn == NULL)
+      if (f->confined_conns[0] == NULL)
         {
           assert_connection_closed (f->error);
           g_clear_error (&f->error);
-          g_assert_nonnull (f->confined_conn);
+          g_assert_nonnull (f->confined_conns[0]);
         }
       else
         {
@@ -1528,7 +1542,7 @@ test_max_connections_per_container (Fixture *f,
    * capacity again */
   for (i = 0; i < G_N_ELEMENTS (socket_paths); i++)
     {
-      GDBusConnection *another = g_dbus_connection_new_for_address_sync (
+      f->confined_conns[1] = g_dbus_connection_new_for_address_sync (
           dbus_addresses[i],
           (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
            G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
@@ -1536,7 +1550,7 @@ test_max_connections_per_container (Fixture *f,
 
       assert_connection_closed (f->error);
       g_clear_error (&f->error);
-      g_assert_null (another);
+      g_assert_null (f->confined_conns[1]);
     }
 
   g_variant_unref (parameters);
@@ -1611,6 +1625,8 @@ static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
+  guint i;
+
   g_clear_object (&f->proxy);
 
   fixture_disconnect_observer (f);
@@ -1627,19 +1643,8 @@ teardown (Fixture *f,
 
   fixture_disconnect_unconfined (f);
 
-  if (f->confined_conn != NULL)
-    {
-      GError *error = NULL;
-
-      g_dbus_connection_close_sync (f->confined_conn, NULL, &error);
-
-      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
-        g_clear_error (&error);
-      else
-        g_assert_no_error (error);
-    }
-
-  g_clear_object (&f->confined_conn);
+  for (i = 0; i < G_N_ELEMENTS (f->confined_conns); i++)
+    fixture_disconnect_confined (f, i);
 
   if (f->daemon_pid != 0)
     {
@@ -1656,6 +1661,9 @@ teardown (Fixture *f,
   g_clear_error (&f->error);
   test_main_context_unref (f->ctx);
   g_free (f->unconfined_unique_name);
+
+  for (i = 0; i < G_N_ELEMENTS (f->confined_unique_names); i++)
+    g_free (f->confined_unique_names[i]);
 }
 
 static const Config stop_server_explicitly =
