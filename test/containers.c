@@ -46,6 +46,13 @@
 
 #include "test-utils-glib.h"
 
+typedef enum
+{
+  NAME_TRISTATE_MAYBE_OWNED = '?',
+  NAME_TRISTATE_OWNED = '+',
+  NAME_TRISTATE_NOT_OWNED = '-'
+} NameTristate;
+
 typedef struct {
     TestMainContext *ctx;
     gboolean skip;
@@ -65,10 +72,18 @@ typedef struct {
 
     GDBusConnection *observer_conn;
     GDBusProxy *observer_proxy;
+    gchar *observer_unique_name;
     GHashTable *containers_removed;
     guint removed_sub;
     DBusConnection *libdbus_observer;
     DBusMessage *latest_shout;
+
+    /* These watch the observer, from the perspective of the unconfined
+     * connection. */
+    NameTristate observer_unique_name_owned;
+    NameTristate observer_well_known_name_owned;
+    guint observer_unique_name_watch;
+    guint observer_well_known_name_watch;
 } Fixture;
 
 typedef struct
@@ -160,6 +175,18 @@ instance_removed_cb (GDBusConnection *observer,
 static void
 fixture_disconnect_unconfined (Fixture *f)
 {
+  if (f->observer_unique_name_watch != 0)
+    {
+      g_bus_unwatch_name (f->observer_unique_name_watch);
+      f->observer_unique_name_watch = 0;
+    }
+
+  if (f->observer_well_known_name_watch != 0)
+    {
+      g_bus_unwatch_name (f->observer_well_known_name_watch);
+      f->observer_well_known_name_watch = 0;
+    }
+
   if (f->unconfined_conn != NULL)
     {
       GError *error = NULL;
@@ -239,6 +266,33 @@ fixture_disconnect_confined (Fixture *f,
 }
 
 static void
+observer_appeared_cb (GDBusConnection *connection,
+                      const gchar *name,
+                      const gchar *name_owner,
+                      gpointer user_data)
+{
+  NameTristate *tristate = user_data;
+
+  g_test_message ("Unconfined connection saw unconfined observer "
+                  "connection \"%s\" appear, owned by \"%s\"",
+                  name, name_owner);
+  *tristate = NAME_TRISTATE_OWNED;
+}
+
+static void
+observer_vanished_cb (GDBusConnection *connection,
+                      const gchar *name,
+                      gpointer user_data)
+{
+  NameTristate *tristate = user_data;
+
+  g_test_message ("Unconfined connection saw unconfined observer "
+                  "connection \"%s\" disappear",
+                  name);
+  *tristate = NAME_TRISTATE_NOT_OWNED;
+}
+
+static void
 setup (Fixture *f,
        gconstpointer context)
 {
@@ -273,6 +327,11 @@ setup (Fixture *f,
        G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
       NULL, NULL, &f->error);
   g_assert_no_error (f->error);
+  f->observer_unique_name = g_strdup (
+      g_dbus_connection_get_unique_name (f->observer_conn));
+  g_test_message ("Unconfined observer connection: \"%s\"",
+                  f->observer_unique_name);
+
   f->containers_removed = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                  g_free, NULL);
   f->removed_sub = g_dbus_connection_signal_subscribe (f->observer_conn,
@@ -293,6 +352,21 @@ setup (Fixture *f,
   if (!dbus_connection_add_filter (f->libdbus_observer, observe_shouting_cb, f,
                                    NULL))
     g_error ("OOM");
+
+  f->observer_unique_name_owned = NAME_TRISTATE_MAYBE_OWNED;
+  f->observer_unique_name_watch = g_bus_watch_name_on_connection (
+      f->unconfined_conn, f->observer_unique_name,
+      G_BUS_NAME_WATCHER_FLAGS_NONE,
+      observer_appeared_cb, observer_vanished_cb,
+      &f->observer_unique_name_owned,
+      NULL);
+  f->observer_well_known_name_owned = NAME_TRISTATE_MAYBE_OWNED;
+  f->observer_well_known_name_watch = g_bus_watch_name_on_connection (
+      f->unconfined_conn, "com.example.Observer",
+      G_BUS_NAME_WATCHER_FLAGS_NONE,
+      observer_appeared_cb, observer_vanished_cb,
+      &f->observer_well_known_name_owned,
+      NULL);
 }
 
 /*
