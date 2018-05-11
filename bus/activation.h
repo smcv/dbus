@@ -56,7 +56,8 @@ dbus_bool_t    bus_activation_service_created  (BusActivation     *activation,
 						DBusError         *error);
 dbus_bool_t    bus_activation_list_services    (BusActivation     *registry,
 						char            ***listp,
-						int               *array_len);
+						int               *array_len,
+                                                DBusConnection    *observer);
 dbus_bool_t    dbus_activation_systemd_failure (BusActivation     *activation,
                                                 DBusMessage       *message);
 

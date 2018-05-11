@@ -701,7 +701,7 @@ bus_driver_handle_list_activatable_services (DBusConnection *connection,
       return FALSE;
     }
 
-  if (!bus_activation_list_services (activation, &services, &len))
+  if (!bus_activation_list_services (activation, &services, &len, connection))
     {
       dbus_message_unref (reply);
       BUS_SET_OOM (error);
