@@ -84,7 +84,29 @@ typedef struct {
     NameTristate observer_well_known_name_owned;
     guint observer_unique_name_watch;
     guint observer_well_known_name_watch;
+
+    /* First confined connection's subscription to NameOwnerChanged */
+    guint confined_0_noc_sub;
+    /* Queue of NameOwnerChange */
+    GQueue name_owner_changes;
+    NameTristate confined_1_name_owned;
 } Fixture;
+
+typedef struct
+{
+  gchar *name;
+  gchar *old_owner;
+  gchar *new_owner;
+} NameOwnerChange;
+
+static void
+name_owner_change_free (NameOwnerChange *self)
+{
+  g_free (self->name);
+  g_free (self->old_owner);
+  g_free (self->new_owner);
+  g_free (self);
+}
 
 typedef struct
 {
@@ -254,6 +276,10 @@ fixture_disconnect_confined (Fixture *f,
     {
       GError *error = NULL;
 
+      if (i == 0 && f->confined_0_noc_sub != 0)
+        g_dbus_connection_signal_unsubscribe (f->confined_conns[i],
+                                              f->confined_0_noc_sub);
+
       g_dbus_connection_close_sync (f->confined_conns[i], NULL, &error);
 
       if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
@@ -292,6 +318,99 @@ observer_vanished_cb (GDBusConnection *connection,
   *tristate = NAME_TRISTATE_NOT_OWNED;
 }
 
+#ifdef HAVE_CONTAINERS_TEST
+/*
+ * Helper for Allow tests: GDBusSignalCallback that adds
+ * NameOwnerChanged signals to a queue.
+ */
+static void
+confined_0_name_owner_changed_cb (GDBusConnection *subscriber,
+                                  const gchar *sender,
+                                  const gchar *sender_path,
+                                  const gchar *iface,
+                                  const gchar *member,
+                                  GVariant *parameters,
+                                  gpointer user_data)
+{
+  Fixture *f = user_data;
+  NameOwnerChange *noc;
+
+  g_assert (subscriber == f->confined_conns[0]);
+
+  g_assert_cmpstr (sender, ==, DBUS_SERVICE_DBUS);
+  g_assert_cmpstr (sender_path, ==, DBUS_PATH_DBUS);
+  g_assert_cmpstr (iface, ==, DBUS_INTERFACE_DBUS);
+  g_assert_cmpstr (member, ==, "NameOwnerChanged");
+
+  noc = g_new0 (NameOwnerChange, 1);
+  g_variant_get (parameters, "(sss)",
+                 &noc->name, &noc->old_owner, &noc->new_owner);
+  g_test_message ("Confined connection saw NameOwnerChanged: \"%s\" owner "
+                  "\"%s\" -> \"%s\"",
+                  noc->name, noc->old_owner, noc->new_owner);
+  g_queue_push_tail (&f->name_owner_changes, noc);
+
+  if (g_strcmp0 (noc->name, f->confined_unique_names[1]) == 0)
+    {
+      if (noc->new_owner[0] != '\0')
+        f->confined_1_name_owned = NAME_TRISTATE_OWNED;
+      else
+        f->confined_1_name_owned = NAME_TRISTATE_NOT_OWNED;
+    }
+}
+
+static gboolean add_container_server (Fixture *f,
+                                      GVariant *parameters);
+#endif
+
+/*
+ * Simple C representation of an Allow rule for use in static
+ * const structs
+ */
+typedef struct
+{
+  guint flags;
+  /* TODO: There will be more content here later */
+} AllowRule;
+
+/*
+ * Flags affecting an entire test-case
+ */
+typedef enum
+{
+  /* If set, the array of rules must be empty (the first one must have
+   * flags == 0) and we will not set the Allow named-parameter at all */
+  ALLOW_TEST_FLAGS_OMIT_ALLOW = (1 << 0),
+  ALLOW_TEST_FLAGS_NONE = 0
+} AllowTestFlags;
+
+/*
+ * A test-case for Allow rules.
+ *
+ * Arrays in this structure are of arbitrary length: any length that
+ * is sufficient for allow_rules_tests will do. Always use G_N_ELEMENTS
+ * when iterating over them.
+ */
+typedef struct
+{
+  const char *name;
+  AllowTestFlags flags;
+  /* Can be terminated early by an entry with flags 0 */
+  const AllowRule rules[16];
+} AllowRulesTest;
+
+static const AllowRulesTest allow_rules_tests[] =
+{
+  { /* Test-case: If the Allow parameter is omitted, the confined
+     * connection can do most things. */
+    "omit-allow", ALLOW_TEST_FLAGS_OMIT_ALLOW,
+
+    { /* rules: no rules */
+      { 0 }
+    }
+  }
+};
+
 static void
 setup (Fixture *f,
        gconstpointer context)
@@ -301,6 +420,8 @@ setup (Fixture *f,
   if (config == NULL)
     config = &default_config;
 
+  f->confined_1_name_owned = NAME_TRISTATE_MAYBE_OWNED;
+  g_queue_init (&f->name_owner_changes);
   f->ctx = test_main_context_get ();
 
   f->bus_address = test_get_dbus_daemon (config->config_file, TEST_USER_ME,
@@ -367,6 +488,70 @@ setup (Fixture *f,
       observer_appeared_cb, observer_vanished_cb,
       &f->observer_well_known_name_owned,
       NULL);
+}
+
+static void
+set_up_allow_test (Fixture *f,
+                   gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const AllowRulesTest *test = context;
+  GVariantDict named_argument_builder;
+  GVariant *parameters = NULL;
+  guint i;
+#endif
+
+  /* Normally setup() assumes context is a const Config *, but
+   * test_allow() needs to use context for the const AllowRulesTest *. */
+  setup (f, NULL);
+
+#ifdef HAVE_CONTAINERS_TEST
+  if (f->skip)
+    return;
+
+  g_variant_dict_init (&named_argument_builder, NULL);
+
+  for (i = 0; i < G_N_ELEMENTS (test->rules); i++)
+    {
+      const AllowRule *rule = &test->rules[i];
+
+      if (rule->flags == 0)
+        break;
+    }
+
+  /* We don't implement adding rules yet. */
+  g_assert (test->flags & ALLOW_TEST_FLAGS_OMIT_ALLOW);
+  g_assert (i == 0);    /* having any rules would make no sense */
+
+  parameters = g_variant_new ("(ssa{sv}@a{sv})",
+                              "com.example.NotFlatpak",
+                              "Confined",
+                              NULL,
+                              g_variant_dict_end (&named_argument_builder));
+
+  if (!add_container_server (f, g_steal_pointer (&parameters)))
+    return;
+
+  for (i = 0; i < G_N_ELEMENTS (f->confined_conns); i++)
+    {
+      fixture_connect_confined (f, i);
+
+      if (i == 0)
+        {
+          /* Watch for NameOwnerChanged on the first confined connection
+           * before we let the second one connect. We'll use this later. */
+          f->confined_0_noc_sub = g_dbus_connection_signal_subscribe (
+              f->confined_conns[0], DBUS_SERVICE_DBUS, DBUS_INTERFACE_DBUS,
+              "NameOwnerChanged", DBUS_PATH_DBUS, NULL,
+              G_DBUS_SIGNAL_FLAGS_NONE,
+              confined_0_name_owner_changed_cb, f, NULL);
+        }
+
+      g_test_message ("Confined connection %u: \"%s\"",
+          i, f->confined_unique_names[i]);
+    }
+
+#endif
 }
 
 /*
@@ -1643,6 +1828,86 @@ test_max_connections_per_container (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for the unique
+ * name of another connection within the container.
+ */
+static void
+test_allow_see_confined_unique_name (Fixture *f,
+                                     gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GList *iter;
+  gboolean saw_connect;
+  gboolean saw_disconnect;
+
+  if (f->skip)
+    return;
+
+  /* Close confined_conns[1] and assert that
+   * confined_conns[0] sees NameOwnerChanged, because connections in
+   * the same container always see each other. We can also assert
+   * that confined_conns[0] saw NameOwnerChanged when confined_conns[1]
+   * connected, because confined_conns[0] was there first. */
+  g_test_message ("Checking that confined connection 0 sees "
+                  "confined connection 1 gaining/losing unique name");
+  fixture_disconnect_confined (f, 1);
+
+  if (g_error_matches (f->error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+    g_clear_error (&f->error);
+  else
+    g_assert_no_error (f->error);
+
+  /* We can't use test_sync_gdbus_connections() here, because one of the
+   * connections that's involved has just disconnected, so we have to
+   * just wait for it. */
+  while (f->confined_1_name_owned != NAME_TRISTATE_NOT_OWNED)
+    g_main_context_iteration (NULL, TRUE);
+
+  saw_connect = FALSE;
+  saw_disconnect = FALSE;
+
+  for (iter = f->name_owner_changes.head;
+       iter != NULL;
+       iter = iter->next)
+    {
+      const NameOwnerChange *noc = iter->data;
+
+      g_test_message ("Past NameOwnerChanged: \"%s\" owner \"%s\" -> \"%s\"",
+                      noc->name, noc->old_owner, noc->new_owner);
+
+      if (g_strcmp0 (noc->name, f->confined_unique_names[1]) == 0)
+        {
+          if (noc->old_owner[0] == '\0')
+            {
+              g_assert_cmpstr (noc->old_owner, ==, "");
+              g_assert_cmpstr (noc->new_owner, ==,
+                               f->confined_unique_names[1]);
+              g_assert_false (saw_connect);
+              g_assert_false (saw_disconnect);
+              saw_connect = TRUE;
+              g_test_message ("... saw connect");
+            }
+          else
+            {
+              g_assert_cmpstr (noc->old_owner, ==,
+                               f->confined_unique_names[1]);
+              g_assert_cmpstr (noc->new_owner, ==, "");
+              g_assert_true (saw_connect);
+              g_assert_false (saw_disconnect);
+              saw_disconnect = TRUE;
+              g_test_message ("... saw disconnect");
+            }
+        }
+    }
+
+  g_assert_true (saw_connect);
+  g_assert_true (saw_disconnect);
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -1734,6 +1999,10 @@ teardown (Fixture *f,
   g_free (f->bus_address);
   g_clear_error (&f->error);
   test_main_context_unref (f->ctx);
+  g_queue_foreach (&f->name_owner_changes, (GFunc) name_owner_change_free,
+                   NULL);
+  g_queue_clear (&f->name_owner_changes);
+
   g_free (f->unconfined_unique_name);
 
   for (i = 0; i < G_N_ELEMENTS (f->confined_unique_names); i++)
@@ -1785,6 +2054,7 @@ main (int argc,
   gchar *runtime_dbus_dir;
   gchar *runtime_containers_dir;
   gchar *runtime_services_dir;
+  guint i;
   int ret;
 
   runtime_dir = g_dir_make_tmp ("dbus-test-containers.XXXXXX", &error);
@@ -1841,6 +2111,19 @@ main (int argc,
   g_test_add ("/containers/max-container-metadata-bytes", Fixture,
               &limit_containers,
               setup, test_max_container_metadata_bytes, teardown);
+
+  for (i = 0; i < G_N_ELEMENTS (allow_rules_tests); i++)
+    {
+      const AllowRulesTest *test = &allow_rules_tests[i];
+      gchar *path = NULL;
+
+      path = g_strdup_printf ("/containers/allow/%s/see-confined-unique-name",
+                              test->name);
+      g_test_add (path, Fixture, test,
+                  set_up_allow_test, test_allow_see_confined_unique_name,
+                  teardown);
+      g_free (path);
+    }
 
   ret = g_test_run ();
 
