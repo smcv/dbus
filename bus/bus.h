@@ -152,6 +152,7 @@ dbus_bool_t       bus_context_check_security_policy              (BusContext    
                                                                   DBusConnection   *addressed_recipient,
                                                                   DBusConnection   *proposed_recipient,
                                                                   DBusMessage      *message,
+                                                                  dbus_uint32_t    *send_error_reply,
                                                                   BusActivationEntry *activation_entry,
                                                                   DBusError        *error);
 void              bus_context_check_all_watches                  (BusContext       *context);

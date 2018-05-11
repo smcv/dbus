@@ -2443,7 +2443,7 @@ bus_transaction_send_from_driver (BusTransaction *transaction,
   if (!bus_context_check_security_policy (bus_transaction_get_context (transaction),
                                           transaction,
                                           NULL, connection, connection,
-                                          message, NULL, &error))
+                                          message, NULL, NULL, &error))
     {
       if (!bus_transaction_capture_error_reply (transaction, connection,
                                                 &error, message))

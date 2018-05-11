@@ -96,6 +96,7 @@ send_one_message (DBusConnection *connection,
                                           connection,
                                           message,
                                           NULL,
+                                          NULL,
                                           &stack_error))
     {
       if (!bus_transaction_capture_error_reply (transaction, sender,
@@ -149,7 +150,7 @@ bus_dispatch_matches (BusTransaction *transaction,
                       const char     *needs_to_see_well_known_name,
                       DBusError      *error)
 {
-  DBusError tmp_error;
+  DBusError tmp_error = DBUS_ERROR_INIT;
   BusConnections *connections;
   DBusList *recipients;
   BusMatchmaker *matchmaker;
@@ -175,6 +176,8 @@ bus_dispatch_matches (BusTransaction *transaction,
   /* First, send the message to the addressed_recipient, if there is one. */
   if (addressed_recipient != NULL)
     {
+      dbus_uint32_t send_error_reply = 0;
+
       /* We don't need to check these because they only make sense for
        * broadcasts */
       _dbus_assert (needs_to_see_conn == NULL);
@@ -183,8 +186,58 @@ bus_dispatch_matches (BusTransaction *transaction,
       if (!bus_context_check_security_policy (context, transaction,
                                               sender, addressed_recipient,
                                               addressed_recipient,
-                                              message, NULL, error))
-        return FALSE;
+                                              message, &send_error_reply,
+                                              NULL, &tmp_error))
+        {
+          /* If the security policy told us to send an error reply to
+           * the addressed recipient instead, do so */
+          if (send_error_reply != 0)
+            {
+              DBusMessage *substitute_message;
+
+              substitute_message = dbus_message_new (DBUS_MESSAGE_TYPE_ERROR);
+
+              if (substitute_message == NULL ||
+                  !dbus_message_set_reply_serial (substitute_message,
+                                                  send_error_reply) ||
+                  !dbus_message_set_sender (substitute_message,
+                                            bus_connection_get_name (sender)) ||
+                  !dbus_message_set_destination (
+                      substitute_message,
+                      bus_connection_get_name (addressed_recipient)) ||
+                  !dbus_message_set_error_name (substitute_message,
+                                                tmp_error.name) ||
+                  !dbus_message_append_args (substitute_message,
+                                             DBUS_TYPE_STRING, &tmp_error.message,
+                                             DBUS_TYPE_INVALID))
+                {
+                  dbus_clear_message (&substitute_message);
+                  dbus_error_free (&tmp_error);
+                  BUS_SET_OOM (error);
+                  return FALSE;
+                }
+
+              dbus_message_set_no_reply (substitute_message, TRUE);
+
+              if (!bus_transaction_capture (transaction, NULL,
+                                            addressed_recipient,
+                                            substitute_message) ||
+                  !bus_transaction_send (transaction, sender,
+                                         addressed_recipient,
+                                         substitute_message))
+                {
+                  dbus_clear_message (&substitute_message);
+                  dbus_error_free (&tmp_error);
+                  BUS_SET_OOM (error);
+                  return FALSE;
+                }
+
+              dbus_message_unref (substitute_message);
+            }
+
+          dbus_move_error (&tmp_error, error);
+          return FALSE;
+        }
 
       if (dbus_message_contains_unix_fds (message) &&
           !dbus_connection_can_send_type (addressed_recipient,
@@ -208,7 +261,6 @@ bus_dispatch_matches (BusTransaction *transaction,
 
   /* Now dispatch to others who look interested in this message */
   connections = bus_context_get_connections (context);
-  dbus_error_init (&tmp_error);
   matchmaker = bus_context_get_matchmaker (context);
 
   recipients = NULL;
@@ -429,7 +481,7 @@ bus_dispatch (DBusConnection *connection,
 
       if (!bus_context_check_security_policy (context, transaction,
                                               connection, NULL, NULL, message,
-                                              NULL, &error))
+                                              NULL, NULL, &error))
         {
           _dbus_verbose ("Security policy rejected message\n");
           goto out;
