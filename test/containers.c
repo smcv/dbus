@@ -59,6 +59,7 @@ typedef struct {
     gchar *socket_path;
     gchar *socket_dbus_address;
     GDBusConnection *unconfined_conn;
+    gchar *unconfined_unique_name;
     GDBusConnection *confined_conn;
 
     GDBusConnection *observer_conn;
@@ -219,6 +220,10 @@ setup (Fixture *f,
        G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
       NULL, NULL, &f->error);
   g_assert_no_error (f->error);
+  f->unconfined_unique_name = g_strdup (
+      g_dbus_connection_get_unique_name (f->unconfined_conn));
+  g_test_message ("Unconfined connection: \"%s\"",
+                  f->unconfined_unique_name);
 
   f->observer_conn = g_dbus_connection_new_for_address_sync (f->bus_address,
       (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
@@ -372,7 +377,6 @@ test_basic (Fixture *f,
   GVariantDict dict;
   const gchar *confined_unique_name;
   const gchar *path_from_query;
-  const gchar *manager_unique_name;
   const gchar *name;
   const gchar *name_owner;
   const gchar *type;
@@ -418,8 +422,8 @@ test_basic (Fixture *f,
   g_clear_pointer (&tuple, g_variant_unref);
 
   g_test_message ("Making a method call from confined app to unconfined...");
-  manager_unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
-  tuple = g_dbus_connection_call_sync (f->confined_conn, manager_unique_name,
+  tuple = g_dbus_connection_call_sync (f->confined_conn,
+                                       f->unconfined_unique_name,
                                        "/", DBUS_INTERFACE_PEER,
                                        "Ping",
                                        NULL, G_VARIANT_TYPE_UNIT,
@@ -766,7 +770,6 @@ test_stop_server (Fixture *f,
   GVariant *parameters;
   gchar *error_name;
   const gchar *confined_unique_name;
-  const gchar *manager_unique_name;
   const gchar *name_owner;
   gboolean gone = FALSE;
   guint name_watch;
@@ -883,9 +886,8 @@ test_stop_server (Fixture *f,
         /* Close the unconfined connection (the container manager) and wait
          * for it to go away */
         g_test_message ("Closing container manager...");
-        manager_unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
         name_watch = g_bus_watch_name_on_connection (f->confined_conn,
-                                                     manager_unique_name,
+                                                     f->unconfined_unique_name,
                                                      G_BUS_NAME_WATCHER_FLAGS_NONE,
                                                      NULL,
                                                      name_gone_set_boolean_cb,
@@ -1653,6 +1655,7 @@ teardown (Fixture *f,
   g_free (f->bus_address);
   g_clear_error (&f->error);
   test_main_context_unref (f->ctx);
+  g_free (f->unconfined_unique_name);
 }
 
 static const Config stop_server_explicitly =
