@@ -363,6 +363,11 @@ static gboolean add_container_server (Fixture *f,
                                       GVariant *parameters);
 #endif
 
+/* Special bus names that are replaced by the appropriate unique name
+ * if they appear in AllowRule.bus_name */
+#define REPLACE_WITH_UNCONFINED_UNIQUE_NAME ":unconfined"
+#define REPLACE_WITH_OBSERVER_UNIQUE_NAME ":observer"
+
 /*
  * Simple C representation of an Allow rule for use in static
  * const structs
@@ -407,6 +412,14 @@ static const AllowRulesTest allow_rules_tests[] =
      * connection can do most things. */
     "omit-allow", ALLOW_TEST_FLAGS_OMIT_ALLOW,
 
+    { /* rules: no rules */
+      { 0 }
+    }
+  },
+
+  { /* Test-case: If the Allow parameter is present but empty, the
+     * confined connection cannot do most things. */
+    "empty-allow", ALLOW_TEST_FLAGS_NONE,
     { /* rules: no rules */
       { 0 }
     }
@@ -499,6 +512,7 @@ set_up_allow_test (Fixture *f,
 #ifdef HAVE_CONTAINERS_TEST
   const AllowRulesTest *test = context;
   GVariantDict named_argument_builder;
+  GVariantBuilder allow_builder;
   GVariant *parameters = NULL;
   guint i;
 #endif
@@ -512,18 +526,40 @@ set_up_allow_test (Fixture *f,
     return;
 
   g_variant_dict_init (&named_argument_builder, NULL);
+  g_variant_builder_init (&allow_builder, G_VARIANT_TYPE ("a(usos)"));
 
   for (i = 0; i < G_N_ELEMENTS (test->rules); i++)
     {
       const AllowRule *rule = &test->rules[i];
+      const char *bus_name = rule->bus_name;
 
       if (rule->flags == 0)
         break;
+
+      if (g_strcmp0 (bus_name, REPLACE_WITH_UNCONFINED_UNIQUE_NAME) == 0)
+        bus_name = f->unconfined_unique_name;
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_OBSERVER_UNIQUE_NAME) == 0)
+        bus_name = f->observer_unique_name;
+      else
+        g_assert (bus_name == NULL || bus_name[0] != ':');
+
+      g_test_message ("Allow[%u]: flags=%x name=\"%s\" path=\"%s\" "
+                      "interface (and member?)=\"%s\"",
+                      i, rule->flags, bus_name, rule->object_path,
+                      rule->interface_and_maybe_member);
+
+      g_variant_builder_add (&allow_builder, "(usos)",
+                             rule->flags, bus_name,
+                             rule->object_path,
+                             rule->interface_and_maybe_member);
     }
 
-  /* We don't implement adding rules yet. */
-  g_assert (test->flags & ALLOW_TEST_FLAGS_OMIT_ALLOW);
-  g_assert (i == 0);    /* having any rules would make no sense */
+  if (test->flags & ALLOW_TEST_FLAGS_OMIT_ALLOW)
+    g_assert (i == 0);    /* having any rules would make no sense */
+  else
+    g_variant_dict_insert (&named_argument_builder,
+                           "Allow", "@a(usos)",
+                           g_variant_builder_end (&allow_builder));
 
   parameters = g_variant_new ("(ssa{sv}@a{sv})",
                               "com.example.NotFlatpak",
