@@ -62,6 +62,7 @@ typedef struct
   DBusList *connections;
   unsigned long uid;
   unsigned announced:1;
+  unsigned has_policy:1;
 } BusContainerInstance;
 
 /* Data attached to a DBusConnection that has created container instances. */
@@ -662,6 +663,57 @@ bus_container_instance_listen (BusContainerInstance *self,
   return TRUE;
 }
 
+/*
+ * Parse the Allow named parameter.
+ *
+ * variant_iter is an iterator over the contents of the corresponding
+ * variant in the a{sv}, which is an array of Allow rules.
+ */
+static dbus_bool_t
+bus_container_instance_parse_allow (BusContainerInstance *self,
+                                    DBusMessageIter *variant_iter,
+                                    DBusError *error)
+{
+  char *signature;
+  DBusMessageIter array_iter;
+  DBusMessageIter struct_iter;
+
+  self->has_policy = TRUE;
+
+  signature = dbus_message_iter_get_signature (variant_iter);
+
+  /* The contents of this array haven't been fully designed yet, but
+   * the current assumption is that each rule will be a (usos) struct. */
+  if (strcmp (signature, "a(usos)") != 0)
+    {
+      dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
+                      "Named parameter \"Allow\" should be of type a(usos)");
+      dbus_free (signature);
+      return FALSE;
+    }
+
+  dbus_free (signature);
+  _dbus_assert (dbus_message_iter_get_arg_type (variant_iter) ==
+                DBUS_TYPE_ARRAY);
+  _dbus_assert (dbus_message_iter_get_element_type (variant_iter) ==
+                DBUS_TYPE_STRUCT);
+  dbus_message_iter_recurse (variant_iter, &array_iter);
+
+  while (dbus_message_iter_get_arg_type (&array_iter) != DBUS_TYPE_INVALID)
+    {
+      _dbus_assert (dbus_message_iter_get_arg_type (&array_iter) ==
+                    DBUS_TYPE_STRUCT);
+      dbus_message_iter_recurse (&array_iter, &struct_iter);
+
+      /* If we supported any Allow rules, we'd implement them here. */
+      dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
+                      "Named parameter \"Allow\" must be empty for now");
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 dbus_bool_t
 bus_containers_handle_add_server (DBusConnection *connection,
                                   BusTransaction *transaction,
@@ -805,6 +857,7 @@ bus_containers_handle_add_server (DBusConnection *connection,
   while (dbus_message_iter_get_arg_type (&dict_iter) != DBUS_TYPE_INVALID)
     {
       DBusMessageIter pair_iter;
+      DBusMessageIter variant_iter;
       const char *param_name;
 
       _dbus_assert (dbus_message_iter_get_arg_type (&dict_iter) ==
@@ -814,12 +867,25 @@ bus_containers_handle_add_server (DBusConnection *connection,
       _dbus_assert (dbus_message_iter_get_arg_type (&pair_iter) ==
                     DBUS_TYPE_STRING);
       dbus_message_iter_get_basic (&pair_iter, &param_name);
+      dbus_message_iter_next (&pair_iter);
+      _dbus_assert (dbus_message_iter_get_arg_type (&pair_iter) ==
+                    DBUS_TYPE_VARIANT);
+      dbus_message_iter_recurse (&pair_iter, &variant_iter);
 
-      /* If we supported any named parameters, we'd copy them into the data
-       * structure here; but we don't, so fail instead. */
-      dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
-                      "Named parameter %s is not understood", param_name);
-      goto fail;
+      if (strcmp (param_name, "Allow") == 0)
+        {
+          if (!bus_container_instance_parse_allow (instance, &variant_iter,
+                                                   error))
+            goto fail;
+        }
+      else
+        {
+          dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
+                          "Named parameter %s is not understood", param_name);
+          goto fail;
+        }
+
+      dbus_message_iter_next (&dict_iter);
     }
 
   /* End of arguments */
