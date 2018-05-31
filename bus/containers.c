@@ -1749,9 +1749,85 @@ bus_containers_check_can_receive (DBusConnection *sender,
                                   DBusMessage *message,
                                   DBusError *error)
 {
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+#endif
+
   _dbus_assert (proposed_recipient != NULL);
   _dbus_assert (message != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  instance = connection_get_instance (proposed_recipient);
+
+  if (instance == NULL)
+    return TRUE;
+
+  if (instance->has_policy)
+    {
+      BusContainerInstance *sender_instance;
+
+      if (dbus_message_contains_unix_fds (message))
+        {
+          dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                          "Connection \"%s\" (%s) is in a container that is "
+                          "not allowed to receive file descriptors",
+                          bus_connection_get_name (proposed_recipient),
+                          bus_connection_get_loginfo (proposed_recipient));
+          return FALSE;
+        }
+
+      if (proposed_recipient == addressed_recipient)
+        {
+          /* Unicast messages are only controlled on the send side, not
+           * the receive side */
+          return TRUE;
+        }
+      else if (addressed_recipient != NULL)
+        {
+          /* Eavesdropping on unicast messages shouldn't be able to
+           * happen here, because containers with non-trivial policy
+           * can't add match rules that would allow it, but let's
+           * be extra-safe and check for it... */
+          dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                          "Connection \"%s\" (%s) is in a container that is "
+                          "not allowed to eavesdrop",
+                          bus_connection_get_name (proposed_recipient),
+                          bus_connection_get_loginfo (proposed_recipient));
+          return FALSE;
+        }
+
+      /* If we get here, the message must have been a broadcast */
+      _dbus_assert (addressed_recipient == NULL);
+
+      /* For NameOwnerChanged, we rely on the needs_to_see arguments
+       * to bus_dispatch_matches() being set */
+      if (sender == NULL &&
+          dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+                                  "NameOwnerChanged"))
+        return TRUE;
+
+      /* Other broadcasts from the dbus-daemon, in particular
+       * ContainerInstanceRemoved, are not special-cased. */
+
+      sender_instance = connection_get_instance (sender);
+
+      if (sender_instance == instance)
+        {
+          /* Messages pass freely within a container */
+          return TRUE;
+        }
+
+      /* TODO: Have a policy by which containers can optionally receive
+       * broadcasts from the outside */
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "Connection \"%s\" (%s) is in a container that is "
+                      "not allowed to receive most messages",
+                      bus_connection_get_name (proposed_recipient),
+                      bus_connection_get_loginfo (proposed_recipient));
+      return FALSE;
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
 
   return TRUE;
 }
