@@ -1672,6 +1672,54 @@ bus_containers_check_can_send (DBusConnection *sender,
                           bus_connection_get_loginfo (sender));
           return FALSE;
         }
+
+      /* Requested replies that contain Unix fds are covered by policy
+       * (fall through). Requested replies that don't contain Unix fds
+       * are unconditionally allowed. */
+      if (!dbus_message_contains_unix_fds (message))
+        return TRUE;
+    }
+
+  if (instance->has_policy)
+    {
+      BusContainerInstance *recipient_instance;
+
+      if (dbus_message_contains_unix_fds (message))
+        {
+          dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                          "Connection \"%s\" (%s) is in a container that is "
+                          "not allowed to send file descriptors",
+                          bus_connection_get_name (sender),
+                          bus_connection_get_loginfo (sender));
+          return FALSE;
+        }
+
+      if (proposed_recipient == NULL)
+        {
+          const char *dest = dbus_message_get_destination (message);
+
+          /* Containers can always talk to the dbus-daemon itself */
+          if (dest != NULL && strcmp (dest, DBUS_SERVICE_DBUS) == 0)
+            return TRUE;
+        }
+
+      recipient_instance = connection_get_instance (proposed_recipient);
+
+      if (recipient_instance == instance)
+        {
+          /* Messages pass freely within a container */
+          return TRUE;
+        }
+
+      /* TODO: Have a policy by which containers can optionally send
+       * messages to the outside */
+
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "Connection \"%s\" (%s) is in a container that is "
+                      "not allowed to send most messages",
+                      bus_connection_get_name (sender),
+                      bus_connection_get_loginfo (sender));
+      return FALSE;
     }
 #endif /* DBUS_ENABLE_CONTAINERS */
 
