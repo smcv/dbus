@@ -37,6 +37,11 @@
 
 #define HAVE_CONTAINERS_TEST
 
+/* For g_open() which is a #define based on open() */
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <gio/gunixfdlist.h>
 #include <gio/gunixsocketaddress.h>
 
@@ -45,6 +50,8 @@
 #endif
 
 #include "test-utils-glib.h"
+
+#define BUS_INTERFACE_STATS "org.freedesktop.DBus.Debug.Stats"
 
 typedef enum
 {
@@ -539,6 +546,36 @@ fixture_assert_name_visibility (Fixture *f,
   g_assert_cmpint (is_visible, ==, g_strv_contains (names, name));
 }
 
+/*
+ * Helper for Allow tests: Return a Unix fd list containing a
+ * reference to /dev/null.
+ */
+static GUnixFDList *
+new_unix_fd_list (void)
+{
+  gint fd;
+
+  fd = g_open ("/dev/null", O_RDONLY, 0666);
+
+  if (fd < 0)
+    g_error ("cannot open /dev/null: %s", g_strerror (errno));
+
+  return g_unix_fd_list_new_from_array (&fd, 1);
+}
+
+/*
+ * Helper for Allow tests: Attach /dev/null to the given message.
+ */
+static void
+message_set_body_to_unix_fd (GDBusMessage *message)
+{
+  GUnixFDList *fd_list = new_unix_fd_list ();
+
+  g_dbus_message_set_body (message, g_variant_new ("(h)", 0));
+  g_dbus_message_set_unix_fd_list (message, fd_list);
+  g_clear_object (&fd_list);
+}
+
 /* A magic string that does not appear in any message that we expect to
  * be allowed through. We use this because otherwise, it's difficult
  * to tell the difference between various replies. When we add more
@@ -549,7 +586,10 @@ fixture_assert_name_visibility (Fixture *f,
   "This content should not have been delivered"
 
 /*
- * Helper for Allow tests, used to detect unsolicited replies.
+ * Helper for Allow tests, used to implement methods and detect
+ * unsolicited replies. We do this in a filter instead of actually
+ * exporting objects so that the test is free to call arbitrary
+ * methods on the other connection.
  *
  * Note that this is invoked in the worker thread.
  */
@@ -559,6 +599,8 @@ allow_tests_message_filter (GDBusConnection *connection,
                             gboolean incoming,
                             gpointer user_data)
 {
+  GDBusMessage *reply;
+  GError *error = NULL;
   GVariant *body;
 
   /* We only care about incoming messages here; outgoing messages can
@@ -579,7 +621,59 @@ allow_tests_message_filter (GDBusConnection *connection,
         g_error ("Message with special marker should not have been received");
     }
 
-  return message;
+  /* If no reply is expected, don't. */
+  if (g_dbus_message_get_message_type (message) !=
+      G_DBUS_MESSAGE_TYPE_METHOD_CALL ||
+      (g_dbus_message_get_flags (message) &
+       G_DBUS_MESSAGE_FLAGS_NO_REPLY_EXPECTED) != 0)
+    return message;
+
+  /* Reply to method calls that expect a reply. */
+  reply = g_dbus_message_new_method_reply (message);
+
+  if (g_strcmp0 (g_dbus_message_get_member (message), "ReplyWithFd") == 0)
+    {
+      /* Implement the ReplyWithFd method (at all object paths, on all
+       * interfaces) to reply with a fd. */
+      message_set_body_to_unix_fd (reply);
+    }
+  else if (g_strcmp0 (g_dbus_message_get_member (message),
+                      "RaiseUnknownMethod") == 0)
+    {
+      g_clear_object (&reply);
+      reply = g_dbus_message_new_method_error (message,
+          DBUS_ERROR_UNKNOWN_METHOD, "No such method");
+    }
+   else if (g_strcmp0 (g_dbus_message_get_interface (message),
+                      DBUS_INTERFACE_PROPERTIES) == 0 &&
+           g_strcmp0 (g_dbus_message_get_member (message), "GetAll") == 0)
+    {
+      /* Return a realistic type for GetAll. */
+      g_dbus_message_set_body (reply, g_variant_new ("(a{sv})", NULL));
+    }
+  else if (g_strcmp0 (g_dbus_message_get_interface (message),
+                      DBUS_INTERFACE_PROPERTIES) == 0 &&
+           g_strcmp0 (g_dbus_message_get_member (message), "Get") == 0)
+    {
+      /* Return a realistic type for Get. */
+      g_dbus_message_set_body (reply,
+                               g_variant_new ("(v)",
+                                              g_variant_new_uint32 (42)));
+    }
+  else
+    {
+      /* Implement all other methods to reply with nothing. */
+    }
+
+  g_dbus_connection_send_message (connection, reply,
+                                  G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+                                  NULL, &error);
+  g_clear_object (&reply);
+  g_assert_no_error (error);
+
+  /* Message has been handled */
+  g_clear_object (&message);
+  return NULL;
 }
 
 static gboolean add_container_server (Fixture *f,
@@ -587,9 +681,12 @@ static gboolean add_container_server (Fixture *f,
 #endif
 
 /* Special bus names that are replaced by the appropriate unique name
- * if they appear in AllowRule.bus_name */
+ * if they appear in AllowMessage.argument or (where possible)
+ * AllowRule.bus_name */
 #define REPLACE_WITH_UNCONFINED_UNIQUE_NAME ":unconfined"
 #define REPLACE_WITH_OBSERVER_UNIQUE_NAME ":observer"
+#define REPLACE_WITH_CONFINED_UNIQUE_NAME ":confined"
+#define REPLACE_WITH_CONFINED_1_UNIQUE_NAME ":confined[1]"
 
 /*
  * Simple C representation of an Allow rule for use in static
@@ -602,6 +699,86 @@ typedef struct
   const char *object_path;
   const char *interface_and_maybe_member;
 } AllowRule;
+
+/*
+ * Flags affecting messages that we should or shouldn't be able to send
+ */
+typedef enum
+{
+  /* If set, the signal or method call will contain a file descriptor,
+   * which isn't always allowed */
+  ALLOW_MESSAGE_FLAGS_SEND_FD = (1 << 0),
+
+  /* If set, the method call's reply will contain a file descriptor.
+   * Meaningless for signals. */
+  ALLOW_MESSAGE_FLAGS_FD_IN_REPLY = (1 << 1),
+
+  /* If set, the signal or method call will come from unconfined_conn
+   * outside the container. If not set, the signal or method call will
+   * come from confined_conns[0] inside the container. Either way, the
+   * reply (if any) is expected to come from the destination, whatever
+   * that happens to be. */
+  ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE = (1 << 2),
+
+  ALLOW_MESSAGE_FLAGS_NONE = 0
+} AllowMessageFlags;
+
+/*
+ * The result of a method call that we should or shouldn't be able
+ * to send
+ */
+typedef enum
+{
+  /* Method calls: If (flags & INITIATOR_OUTSIDE), unconfined_conn can
+   * call a method on a confined connection. Otherwise, confined_conn
+   * can call a method on some other connection. */
+
+  /* Method should return some successful reply. We make no statement
+   * about its contents. */
+  METHOD_SUCCEEDS = 1,
+  /* Method should return boolean 'true' */
+  METHOD_RETURNS_TRUE,
+  /* Method should return boolean 'false' */
+  METHOD_RETURNS_FALSE,
+  /* Method should raise AccessDenied */
+  METHOD_RAISES_ACCESS_DENIED,
+  /* Method should raise NameHasNoOwner */
+  METHOD_RAISES_NAME_HAS_NO_OWNER,
+  /* Method should raise UnixProcessIDUnknown or similar */
+  METHOD_RAISES_CANNOT_INSPECT,
+  /* Method should raise UnknownMethod */
+  METHOD_RAISES_UNKNOWN_METHOD,
+  /* Method should raise InvalidArgs */
+  METHOD_RAISES_INVALID_ARGS,
+  /* Method should either return some successful reply, or return an
+   * error that is not AccessDenied. */
+  METHOD_ALLOWS_ACCESS,
+
+  /* Array terminator */
+  METHOD_INVALID = 0
+} AllowMethodCallResult;
+
+/*
+ * A method call that we should or shouldn't be able to send
+ */
+typedef struct
+{
+  AllowMethodCallResult result;
+  /* The destination, or NULL if we are communicating with the dbus-daemon
+   * as a peer */
+  const char *bus_name;
+  /* The destination object path */
+  const char *object_path;
+  /* The interface */
+  const char *iface;
+  /* The member name. Some member names are given special meaning
+   * as a short-cut for defining test cases, for example AddMatch
+   * gets a valid match rule. */
+  const char *member;
+  /* A string argument or NULL */
+  const char *argument;
+  AllowMessageFlags flags;
+} AllowMethodCall;
 
 /*
  * Flags affecting an entire test-case
@@ -632,6 +809,8 @@ typedef struct
   const char * const can_see_names[16];
   /* Can be terminated early by an entry with type NULL */
   const char * const cannot_see_names[16];
+  /* Can be terminated early by an entry with result INVALID */
+  const AllowMethodCall method_calls[64];
 } AllowRulesTest;
 
 static const AllowRulesTest allow_rules_tests[] =
@@ -656,6 +835,211 @@ static const AllowRulesTest allow_rules_tests[] =
     {
       /* cannot_see_names: We can't see these names */
       NULL
+    },
+    { /* method_calls: */
+
+      /* We don't explicitly test Hello() here, but if it didn't work,
+       * then the confined connection would fail to connect; so it must
+       * work even when restricted. */
+
+      /* We have to test whether we can see the unconfined connection
+       * before it calls our methods or sends unicast signals to us,
+       * because those actions implicitly add SEE access. */
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+        "GetNameOwner", REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RETURNS_TRUE,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+        "NameHasOwner", REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May call Peer methods on the dbus-daemon as our peer */
+      { METHOD_SUCCEEDS,
+        NULL, "/", DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* We can't rely on this succeeding in autobuilder environments
+       * that might not have a machine ID, but if it fails, it should
+       * be with FileNotFound */
+      { METHOD_ALLOWS_ACCESS,
+        NULL, "/", DBUS_INTERFACE_PEER, "GetMachineId", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May call Peer methods on the bus driver */
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* As above, we can't rely on this succeeding */
+      { METHOD_ALLOWS_ACCESS,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_PEER,
+        "GetMachineId", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_INTROSPECTABLE,
+        "Introspect", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May call unrestricted methods on the bus driver */
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "GetId", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "AddMatch", "type='signal'",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not eavesdrop (even though it is otherwise unrestricted) */
+      { METHOD_RAISES_ACCESS_DENIED,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "AddMatch", "type='signal',eavesdrop='true'",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "AddMatch", "type='signal',eavesdrop=true",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May receive method calls from outside.
+       * May send success or error replies to such method calls. */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/", DBUS_INTERFACE_PEER,
+        "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+      { METHOD_RAISES_UNKNOWN_METHOD,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/", DBUS_INTERFACE_PEER,
+        "RaiseUnknownMethod", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+
+      /* Peers inside the container may communicate among themselves */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME, "/",
+        DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE, },
+
+      /* Must be able to inspect connections inside the container,
+       * identified by their well-known names */
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+        "GetConnectionCredentials", "com.example.Confined",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May send fds to dbus-daemon (we get a different error but
+       * that's OK) */
+      { METHOD_RAISES_INVALID_ARGS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_SEND_FD },
+      /* We can't test whether sending fds to dbus-daemon in a
+       * signal is allowed (but it's academic, because it's going to
+       * receive them whether it wants to or not) */
+
+      /* May send fds to outside */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* May receive fds from outside */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE | ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* May send fds to outside in replies */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Test", "ReplyWithFd", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE | ALLOW_MESSAGE_FLAGS_FD_IN_REPLY },
+
+      /* May receive fds from outside in replies */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Test", "ReplyWithFd", NULL,
+        ALLOW_MESSAGE_FLAGS_FD_IN_REPLY },
+
+      /* May send method calls to outside */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS,
+        "com.example.Unconfined", "/",
+        DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must be able to request arbitrary well-known names */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "RequestName", "com.example.Hello",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "ReleaseName", "com.example.Hello",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must be able to inspect connections outside the container */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials",
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* We assume that if containers work, so does getpeereid() or
+       * equivalent */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixUser",
+        REPLACE_WITH_OBSERVER_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixProcessID",
+        "com.example.Unconfined",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* This is Solaris-specific so the method call will be allowed,
+       * but fail, on all other platforms */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetAdtAuditSessionData",
+        "com.example.Observer",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* The dbus-daemon itself counts as being outside the container.
+       * This will be allowed, but fail, on non-SELinux systems */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionSELinuxSecurityContext",
+        DBUS_SERVICE_DBUS,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1, "GetConnectionInstance",
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must be able to inspect connections inside the container */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials",
+        REPLACE_WITH_CONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* We assume that if containers work, so does getpeereid() or
+       * equivalent */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixUser",
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* We can't assume that we have enough credentials-passing to
+       * know the process ID */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixProcessID",
+        REPLACE_WITH_CONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* This is Solaris-specific so the method call will be allowed,
+       * but fail, on all other platforms */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetAdtAuditSessionData",
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* This will be allowed, but fail, on non-SELinux systems */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionSELinuxSecurityContext",
+        REPLACE_WITH_CONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1, "GetConnectionInstance",
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      { METHOD_INVALID }    /* sentinel */
     }
   },
 
@@ -680,6 +1064,255 @@ static const AllowRulesTest allow_rules_tests[] =
       "com.example.SystemdActivatable1",
       "com.example.Unconfined",
       NULL
+    },
+    { /* method_calls: */
+
+      /* We don't explicitly test Hello() here, but if it didn't work,
+       * then the confined connection would fail to connect; so it must
+       * work even when restricted. */
+
+      /* We have to test whether we can see the unconfined connection
+       * before it calls our methods or sends unicast signals to us,
+       * because those actions implicitly add SEE access. */
+      { METHOD_RAISES_NAME_HAS_NO_OWNER,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+        "GetNameOwner", REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RETURNS_FALSE,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+        "NameHasOwner", REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* Trying to inspect a connection we can't see also yields
+       * NAME_HAS_NO_OWNER */
+      { METHOD_RAISES_NAME_HAS_NO_OWNER, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials",
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May call Peer methods on the dbus-daemon as our peer */
+      { METHOD_SUCCEEDS,
+        NULL, "/", DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* As above, we can't rely on this succeeding */
+      { METHOD_ALLOWS_ACCESS,
+        NULL, "/", DBUS_INTERFACE_PEER, "GetMachineId", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May call Peer methods on the bus driver */
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* As above, we can't rely on this succeeding */
+      { METHOD_ALLOWS_ACCESS,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_PEER,
+        "GetMachineId", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_INTROSPECTABLE,
+        "Introspect", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May call unrestricted methods on the bus driver */
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "GetId", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "AddMatch", "type='signal'",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not eavesdrop */
+      { METHOD_RAISES_ACCESS_DENIED,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "AddMatch", "type='signal',eavesdrop='true'",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_DBUS,
+        "AddMatch", "type='signal',eavesdrop=true",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May receive method calls from outside, as long as there are no
+       * Unix fds attached.
+       * May send success or error replies to such method calls. */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/", DBUS_INTERFACE_PEER,
+        "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+      { METHOD_RAISES_UNKNOWN_METHOD,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/", DBUS_INTERFACE_PEER,
+        "RaiseUnknownMethod", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+
+      /* Peers inside the container may communicate among themselves */
+      { METHOD_SUCCEEDS,
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME, "/",
+        DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE, },
+
+      /* Must not send fds to dbus-daemon */
+      { METHOD_RAISES_ACCESS_DENIED,
+        DBUS_SERVICE_DBUS, "/", DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_SEND_FD },
+      /* We can't test whether sending fds to dbus-daemon in a
+       * signal is allowed (but it's academic, because it's going to
+       * receive them whether it wants to or not) */
+
+      /* Must not send fds to outside */
+      { METHOD_RAISES_ACCESS_DENIED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* Must not receive fds from outside */
+      { METHOD_RAISES_ACCESS_DENIED,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE | ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* Must not send fds to outside in replies */
+      { METHOD_RAISES_ACCESS_DENIED,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Test", "ReplyWithFd", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE | ALLOW_MESSAGE_FLAGS_FD_IN_REPLY },
+
+      /* Must not receive fds from outside in replies */
+      { METHOD_RAISES_ACCESS_DENIED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Test", "ReplyWithFd", NULL,
+        ALLOW_MESSAGE_FLAGS_FD_IN_REPLY },
+
+      /* Must not send method calls to outside */
+      { METHOD_RAISES_ACCESS_DENIED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED,
+        "com.example.Unconfined", "/",
+        DBUS_INTERFACE_PEER, "Ping", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not be able to request a well-known name */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "RequestName", "com.example.Confined",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "RequestName", "com.example.Observer",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "RequestName", "com.example.SystemdActivatable1",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "RequestName", "com.example.Unconfined",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not release a well-known name (if we could, we could use the
+       * result as an oracle to see whether it's owned) */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "ReleaseName", "com.example.Unconfined",
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not become a monitor */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_MONITORING, "BecomeMonitor", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not manipulate activation environment */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "UpdateActivationEnvironment", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not manipulate Verbose/Stats (if supported) */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_VERBOSE, "EnableVerbose", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        BUS_INTERFACE_STATS, "GetStats", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must not be able to inspect connections outside the container */
+#if 0
+      /* TODO: We should get ACCESS_DENIED for this one, but we currently
+       * get NAME_HAS_NO_OWNER because implicit SEE access for unique
+       * names that have communicated with the container is not yet
+       * implemented */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials",
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+#endif
+      { METHOD_RAISES_NAME_HAS_NO_OWNER, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixUser",
+        REPLACE_WITH_OBSERVER_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_NAME_HAS_NO_OWNER, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixProcessID",
+        "com.example.Unconfined",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_NAME_HAS_NO_OWNER, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetAdtAuditSessionData",
+        "com.example.Observer",
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RAISES_NAME_HAS_NO_OWNER, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1, "GetConnectionInstance",
+        REPLACE_WITH_OBSERVER_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* The dbus-daemon itself counts as being outside the container */
+      { METHOD_RAISES_ACCESS_DENIED, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionSELinuxSecurityContext",
+        DBUS_SERVICE_DBUS,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* Must be able to inspect connections inside the container */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials",
+        REPLACE_WITH_CONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* We assume that if containers work, so does getpeereid() or
+       * equivalent */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixUser",
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* We can't assume that we have enough credentials-passing to
+       * know the process ID */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixProcessID",
+        REPLACE_WITH_CONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* This is Solaris-specific so the method call will be allowed,
+       * but fail, on all other platforms */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetAdtAuditSessionData",
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      /* This will be allowed, but fail, on non-SELinux systems */
+      { METHOD_ALLOWS_ACCESS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionSELinuxSecurityContext",
+        REPLACE_WITH_CONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS,
+        DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1, "GetConnectionInstance",
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+#if 0
+      /* TODO: implicit SEE access for unique
+       * names that have communicated with the container is not yet
+       * implemented */
+      /* After the unconfined connection has contacted us, we can SEE it. */
+      { METHOD_SUCCEEDS, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "GetNameOwner",
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+      { METHOD_RETURNS_TRUE, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+        DBUS_INTERFACE_DBUS, "NameHasOwner",
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME,
+        ALLOW_MESSAGE_FLAGS_NONE },
+#endif
+
+      { METHOD_INVALID }     /* sentinel */
     }
   }
 };
@@ -874,7 +1507,13 @@ set_up_allow_test (Fixture *f,
       if (rule->flags == 0)
         break;
 
-      if (g_strcmp0 (bus_name, REPLACE_WITH_UNCONFINED_UNIQUE_NAME) == 0)
+      /* We can't use the confined connections' unique names in Allow
+       * rules, because we can't create those connections until the
+       * container server is already up. */
+      if (g_strcmp0 (bus_name, REPLACE_WITH_CONFINED_UNIQUE_NAME) == 0 ||
+          g_strcmp0 (bus_name, REPLACE_WITH_CONFINED_1_UNIQUE_NAME) == 0)
+        g_error ("test violates causality");
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_UNCONFINED_UNIQUE_NAME) == 0)
         bus_name = f->unconfined_unique_name;
       else if (g_strcmp0 (bus_name, REPLACE_WITH_OBSERVER_UNIQUE_NAME) == 0)
         bus_name = f->observer_unique_name;
@@ -2890,6 +3529,288 @@ test_allow_no_unsolicited_replies (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for method calls,
+ * including some special-cased method calls like name ownership.
+ */
+static void
+test_allow_methods (Fixture *f,
+                    gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const AllowRulesTest *test = context;
+  GVariant *parameters = NULL;
+  GAsyncResult *result = NULL;
+  GVariant *reply = NULL;
+  guint i;
+
+  if (f->skip)
+    return;
+
+  /* This is the data-driven part of the test: try sending a lot of
+   * method calls and see what happens. */
+  for (i = 0; i < G_N_ELEMENTS (test->method_calls); i++)
+    {
+      const AllowMethodCall *method_call = &test->method_calls[i];
+      const gchar *bus_name = method_call->bus_name;
+      const gchar *argument = method_call->argument;
+      GDBusConnection *initiator;
+      const gchar *initiator_description;
+
+      if (method_call->result == METHOD_INVALID)
+        break;
+
+      g_test_message ("%s %s #%d", G_STRFUNC, test->name, i);
+
+      /* do not test g_dbus_is_name() until after we have substituted
+       * special strings like REPLACE_WITH_CONFINED_UNIQUE_NAME */
+      g_assert (method_call->object_path != NULL);
+      g_assert (g_variant_is_object_path (method_call->object_path));
+      g_assert (method_call->iface != NULL);
+      g_assert (g_dbus_is_interface_name (method_call->iface));
+      g_assert (method_call->member != NULL);
+      g_assert (g_dbus_is_member_name (method_call->member));
+
+      if (method_call->flags & ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE)
+        {
+          initiator = f->unconfined_conn;
+          initiator_description = "unconfined connection";
+        }
+      else
+        {
+          initiator = f->confined_conns[0];
+          initiator_description = "confined connection";
+        }
+
+      if (g_strcmp0 (bus_name, REPLACE_WITH_CONFINED_UNIQUE_NAME) == 0)
+        bus_name = f->confined_unique_names[0];
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_CONFINED_1_UNIQUE_NAME) == 0)
+        bus_name = f->confined_unique_names[1];
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_UNCONFINED_UNIQUE_NAME) == 0)
+        bus_name = f->unconfined_unique_name;
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_OBSERVER_UNIQUE_NAME) == 0)
+        bus_name = f->observer_unique_name;
+      else
+        g_assert (bus_name == NULL || bus_name[0] != ':');
+
+      g_assert (bus_name == NULL || g_dbus_is_name (bus_name));
+
+      if (g_strcmp0 (argument, REPLACE_WITH_CONFINED_UNIQUE_NAME) == 0)
+        argument = f->confined_unique_names[0];
+      else if (g_strcmp0 (argument,
+                          REPLACE_WITH_CONFINED_1_UNIQUE_NAME) == 0)
+        argument = f->confined_unique_names[1];
+      else if (g_strcmp0 (argument,
+                          REPLACE_WITH_UNCONFINED_UNIQUE_NAME) == 0)
+        argument = f->unconfined_unique_name;
+      else if (g_strcmp0 (argument,
+                          REPLACE_WITH_OBSERVER_UNIQUE_NAME) == 0)
+        argument = f->observer_unique_name;
+
+      g_test_message ("%s calling method", initiator_description);
+
+      if (g_strcmp0 (method_call->bus_name, bus_name) != 0)
+        g_test_message ("... on %s (%s)", method_call->bus_name, bus_name);
+      else
+        g_test_message ("... on %s", bus_name);
+
+      g_test_message ("... path %s", method_call->object_path);
+      g_test_message ("... %s.%s", method_call->iface, method_call->member);
+
+      if (argument != NULL)
+        {
+          if (g_strcmp0 (method_call->argument, argument) != 0)
+            g_test_message ("... argument \"%s\" (\"%s\")",
+                            method_call->argument, argument);
+          else
+            g_test_message ("... argument \"%s\"", argument);
+        }
+
+      if (method_call->flags & ALLOW_MESSAGE_FLAGS_SEND_FD)
+        {
+          g_assert_null (argument);
+          parameters = g_variant_new ("(h)", 0);
+          g_test_message ("... argument <fd for /dev/null>");
+        }
+      else if (g_strcmp0 (method_call->member, "RequestName") == 0)
+        {
+          g_assert_nonnull (argument);
+          parameters = g_variant_new ("(su)",
+                                      argument,
+                                      DBUS_NAME_FLAG_DO_NOT_QUEUE);
+        }
+      else if (g_strcmp0 (method_call->member, "StartServiceByName") == 0)
+        {
+          g_assert_nonnull (argument);
+          parameters = g_variant_new ("(su)", argument, 0);
+        }
+      else if (argument != NULL)
+        {
+          parameters = g_variant_new ("(s)", argument);
+        }
+
+      result = NULL;
+
+      if (method_call->flags & ALLOW_MESSAGE_FLAGS_SEND_FD)
+        {
+          GUnixFDList *fd_list = new_unix_fd_list ();
+
+          g_dbus_connection_call_with_unix_fd_list (initiator,
+              bus_name, method_call->object_path, method_call->iface,
+              method_call->member, g_steal_pointer (&parameters), NULL,
+              G_DBUS_CALL_FLAGS_NONE, -1, fd_list, NULL,
+              test_store_result_cb, &result);
+          g_clear_object (&fd_list);
+
+          while (result == NULL)
+            g_main_context_iteration (NULL, TRUE);
+
+          reply = g_dbus_connection_call_with_unix_fd_list_finish (
+              initiator, NULL, result, &f->error);
+        }
+      else
+        {
+          g_dbus_connection_call (initiator, bus_name,
+                                  method_call->object_path,
+                                  method_call->iface,
+                                  method_call->member,
+                                  g_steal_pointer (&parameters), NULL,
+                                  G_DBUS_CALL_FLAGS_NONE,
+                                  -1,
+                                  NULL, test_store_result_cb, &result);
+
+          while (result == NULL)
+            g_main_context_iteration (NULL, TRUE);
+
+          reply = g_dbus_connection_call_finish (initiator, result, &f->error);
+        }
+
+      if (reply != NULL)
+        {
+          gchar *printable = g_variant_print (reply, TRUE);
+
+          g_test_message ("-> success: %s", printable);
+          g_free (printable);
+        }
+      else
+        {
+          gchar *printable = g_dbus_error_get_remote_error (f->error);
+
+          g_test_message ("-> error: %s: %s", printable, f->error->message);
+          g_free (printable);
+        }
+
+      switch (method_call->result)
+        {
+          case METHOD_SUCCEEDS:
+              {
+                g_assert_no_error (f->error);
+                g_assert_nonnull (reply);
+              }
+            break;
+
+          case METHOD_ALLOWS_ACCESS:
+            if (reply != NULL)
+              {
+                g_assert_no_error (f->error);
+              }
+            else
+              {
+                g_assert_nonnull (f->error);
+                g_assert_cmpint (f->error->code, !=,
+                                 G_DBUS_ERROR_ACCESS_DENIED);
+              }
+            break;
+
+          case METHOD_RETURNS_TRUE:
+          case METHOD_RETURNS_FALSE:
+              {
+                gboolean b;
+
+                g_assert_no_error (f->error);
+                g_assert_cmpstr (g_variant_get_type_string (reply), ==,
+                                 "(b)");
+                g_assert_nonnull (reply);
+                g_variant_get (reply, "(b)", &b);
+                g_assert_cmpint (b, ==,
+                                 (method_call->result == METHOD_RETURNS_TRUE));
+              }
+            break;
+
+          case METHOD_RAISES_NAME_HAS_NO_OWNER:
+              {
+                g_assert_error (f->error, G_DBUS_ERROR,
+                                G_DBUS_ERROR_NAME_HAS_NO_OWNER);
+                g_assert_null (reply);
+              }
+            break;
+
+          case METHOD_RAISES_UNKNOWN_METHOD:
+              {
+                g_assert_error (f->error, G_DBUS_ERROR,
+                                G_DBUS_ERROR_UNKNOWN_METHOD);
+                g_assert_null (reply);
+              }
+            break;
+
+          case METHOD_RAISES_INVALID_ARGS:
+              {
+                g_assert_error (f->error, G_DBUS_ERROR,
+                                G_DBUS_ERROR_INVALID_ARGS);
+                g_assert_null (reply);
+              }
+            break;
+
+          case METHOD_RAISES_ACCESS_DENIED:
+              {
+                g_assert_error (f->error, G_DBUS_ERROR,
+                                G_DBUS_ERROR_ACCESS_DENIED);
+                g_assert_null (reply);
+              }
+            break;
+
+          case METHOD_RAISES_CANNOT_INSPECT:
+              {
+                g_assert_nonnull (f->error);
+                g_assert_null (reply);
+                /* We target GLib 2.40, for Ubuntu 14.04 (Travis-CI),
+                 * where this is the best we can do. */
+                g_assert_cmpint (f->error->code, !=,
+                                 G_DBUS_ERROR_ACCESS_DENIED);
+
+#if GLIB_CHECK_VERSION (2, 42, 0)
+                /* In GLib >= 2.42 we can be more specific. */
+                if (glib_check_version (2, 42, 0))
+                  {
+                    switch (f->error->code)
+                      {
+                        case G_DBUS_ERROR_ADT_AUDIT_DATA_UNKNOWN:
+                        case G_DBUS_ERROR_SELINUX_SECURITY_CONTEXT_UNKNOWN:
+                        case G_DBUS_ERROR_UNIX_PROCESS_ID_UNKNOWN:
+                          break;
+
+                        default:
+                          g_error ("Unexpected error code %d",
+                                   f->error->code);
+                      }
+                  }
+#endif
+              }
+            break;
+
+          case METHOD_INVALID:
+          default:
+            g_assert_not_reached ();
+        }
+
+      g_clear_error (&f->error);
+      g_clear_pointer (&reply, g_variant_unref);
+    }
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -3136,6 +4057,11 @@ main (int argc,
       g_test_add (path, Fixture, test,
                   set_up_allow_test, test_allow_no_unsolicited_replies,
                   teardown);
+      g_free (path);
+
+      path = g_strdup_printf ("/containers/allow/%s/methods", test->name);
+      g_test_add (path, Fixture, test,
+                  set_up_allow_test, test_allow_methods, teardown);
       g_free (path);
     }
 
