@@ -359,6 +359,54 @@ confined_0_name_owner_changed_cb (GDBusConnection *subscriber,
     }
 }
 
+static gboolean
+try_request_name (GDBusConnection *connection,
+                  const gchar *name,
+                  guint32 *result,
+                  GError **error)
+{
+  GVariant *reply;
+
+  reply = g_dbus_connection_call_sync (
+      connection, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+      "RequestName",
+      g_variant_new ("(su)", name, DBUS_NAME_FLAG_DO_NOT_QUEUE),
+      G_VARIANT_TYPE ("(u)"),
+      G_DBUS_CALL_FLAGS_NONE,
+      -1,
+      NULL,
+      error);
+
+  if (reply != NULL)
+    {
+      g_variant_get (reply, "(u)", result);
+
+      if (error != NULL)
+        g_assert_null (*error);
+
+      g_variant_unref (reply);
+      return TRUE;
+    }
+  else if (error != NULL)
+    {
+      g_assert_nonnull (*error);
+    }
+
+  return FALSE;
+}
+
+static void
+assert_request_name_succeeds (GDBusConnection *connection,
+                              const gchar *name)
+{
+  GError *error = NULL;
+  guint32 result;
+
+  try_request_name (connection, name, &result, &error);
+  g_assert_no_error (error);
+  g_assert_cmpuint (result, ==, DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER);
+}
+
 static gboolean add_container_server (Fixture *f,
                                       GVariant *parameters);
 #endif
@@ -404,6 +452,7 @@ typedef struct
   AllowTestFlags flags;
   /* Can be terminated early by an entry with flags 0 */
   const AllowRule rules[16];
+  const char *own_name;
 } AllowRulesTest;
 
 static const AllowRulesTest allow_rules_tests[] =
@@ -585,8 +634,21 @@ set_up_allow_test (Fixture *f,
               confined_0_name_owner_changed_cb, f, NULL);
         }
 
-      g_test_message ("Confined connection %u: \"%s\"",
-          i, f->confined_unique_names[i]);
+      if (i == 1 && test->own_name != NULL)
+        {
+          /* Give the second confined connection a well-known name
+           * if necessary/possible, so we can test what happens when it
+           * has one */
+          assert_request_name_succeeds (f->confined_conns[1], test->own_name);
+          g_test_message ("Confined connection %u: \"%s\" owns \"%s\"",
+              i, g_dbus_connection_get_unique_name (f->confined_conns[i]),
+              test->own_name);
+        }
+      else
+        {
+          g_test_message ("Confined connection %u: \"%s\"",
+              i, f->confined_unique_names[i]);
+        }
     }
 
 #endif
