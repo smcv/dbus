@@ -1815,8 +1815,44 @@ bus_containers_check_can_inspect (DBusConnection *observer,
                                   DBusConnection *other,
                                   DBusError *error)
 {
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+#endif
+
   _dbus_assert (observer != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  instance = connection_get_instance (observer);
+
+  if (instance == NULL)
+    return TRUE;
+
+  if (instance->has_policy)
+    {
+      BusContainerInstance *other_instance;
+
+      other_instance = connection_get_instance (other);
+
+      if (other_instance == instance)
+        {
+          /* There are no secrets between connections in a container */
+          return TRUE;
+        }
+
+      /* TODO: Have a policy by which containers can optionally inspect
+       * connections on the outside */
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "Connection \"%s\" (%s) is in a container that is "
+                      "not allowed to inspect \"%s\"",
+                      bus_connection_get_name (observer),
+                      bus_connection_get_loginfo (observer),
+                      other == NULL
+                        ? DBUS_SERVICE_DBUS
+                        : bus_connection_get_name (other));
+      return FALSE;
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
 
   return TRUE;
 }
