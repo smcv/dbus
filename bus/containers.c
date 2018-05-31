@@ -1682,8 +1682,43 @@ dbus_bool_t
 bus_containers_check_can_see_connection (DBusConnection *observer,
                                          DBusConnection *subject)
 {
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+#endif
+
   _dbus_assert (observer != NULL);
   _dbus_assert (subject != NULL);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  instance = connection_get_instance (observer);
+
+  if (instance == NULL)
+    return TRUE;
+
+  if (instance->has_policy)
+    {
+      BusContainerInstance *subject_instance;
+
+      /* Trivial case: if the same connection owns it, it's
+       * obviously visible */
+      if (subject == observer)
+        return TRUE;
+
+      subject_instance = connection_get_instance (subject);
+
+      /* If it's the unique name of another connection in the same
+       * container instance then it's visible */
+      if (subject_instance == instance)
+        return TRUE;
+
+      /* TODO: Allow containers to see unique names that have
+       * previously contacted them */
+
+      /* TODO: Have a policy by which containers can optionally see
+       * other unique names */
+      return FALSE;
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
 
   return TRUE;
 }
