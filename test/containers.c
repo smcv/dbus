@@ -2563,6 +2563,140 @@ test_allow_see_confined_well_known_name (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for names outside
+ * the container.
+ */
+static void
+test_allow_see_observer (Fixture *f,
+                         gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const AllowRulesTest *test = context;
+  GList *iter;
+  gboolean saw_acquire;
+  gboolean saw_lose;
+  gboolean saw_disconnect;
+
+  if (f->skip)
+    return;
+
+  /* When we disconnect some other unconfined connection, we get the
+   * NameOwnerChanged for its unique name if and only if we can SEE
+   * either its well-known name or unrelated unique names (it never sent
+   * a message to us, so we didn't pick up SEE access automatically);
+   * and we get the NameOwnerChanged for its well-known name if and
+   * only if we can SEE its well-known name.
+   *
+   * We can't wait for the confined connection to see NameOwnerChanged
+   * from non-empty to empty for the observer, because normally it
+   * shouldn't have seen that. Instead, we establish causal ordering
+   * by waiting for the other unconfined connection to see the observer
+   * disappear, then waiting for the other unconfined connection to
+   * ping the observer. */
+
+  /* Wait for the unconfined connection to know the observer has its name */
+  while (f->observer_unique_name_owned != NAME_TRISTATE_OWNED &&
+         f->observer_well_known_name_owned != NAME_TRISTATE_OWNED)
+    g_main_context_iteration (NULL, TRUE);
+
+  /* Trigger NameOwnerChanged, if we're allowed to receive it */
+  fixture_disconnect_observer (f);
+
+  if (g_error_matches (f->error, G_IO_ERROR, G_IO_ERROR_CLOSED))
+    g_clear_error (&f->error);
+  else
+    g_assert_no_error (f->error);
+
+  /* Wait for the unconfined connection to catch up with the observer
+   * connection */
+  while (f->observer_unique_name_owned != NAME_TRISTATE_NOT_OWNED &&
+         f->observer_well_known_name_owned != NAME_TRISTATE_NOT_OWNED)
+    g_main_context_iteration (NULL, TRUE);
+
+  /* Wait for the confined connection to catch up with the unconfined
+   * connection */
+  test_sync_gdbus_connections (f->unconfined_conn, f->confined_conns[0]);
+
+  /* Assert that we saw the right NameOwnerChanged signals */
+  if (allow_rules_test_can_see (test, "com.example.Observer"))
+    {
+      g_test_message ("Checking that confined connections can see "
+                      "NameOwnerChanged for com.example.Observer");
+      saw_acquire = FALSE;
+      saw_lose = FALSE;
+      saw_disconnect = FALSE;
+
+      for (iter = f->name_owner_changes.head;
+           iter != NULL;
+           iter = iter->next)
+        {
+          const NameOwnerChange *noc = iter->data;
+
+          if (g_strcmp0 (noc->name, "com.example.Observer") == 0)
+            {
+              if (noc->old_owner[0] == '\0')
+                {
+                  g_assert_cmpstr (noc->old_owner, ==, "");
+                  g_assert_cmpstr (noc->new_owner, ==, f->observer_unique_name);
+                  g_assert_false (saw_acquire);
+                  saw_acquire = TRUE;
+                }
+              else
+                {
+                  g_assert_cmpstr (noc->old_owner, ==, f->observer_unique_name);
+                  g_assert_cmpstr (noc->new_owner, ==, "");
+                  g_assert_true (saw_acquire);
+                  g_assert_false (saw_lose);
+                  saw_lose = TRUE;
+                }
+            }
+          else if (g_strcmp0 (noc->name, f->observer_unique_name) == 0)
+            {
+              g_assert_cmpstr (noc->old_owner, ==, f->observer_unique_name);
+              g_assert_cmpstr (noc->new_owner, ==, "");
+              g_assert_true (saw_acquire);
+              g_assert_false (saw_disconnect);
+              saw_disconnect = TRUE;
+            }
+        }
+
+      g_assert_true (saw_acquire);
+      g_assert_true (saw_lose);
+      /* Being able to see the well-known name should imply that we can
+       * see the unique name that owned it */
+      g_assert_true (saw_disconnect);
+    }
+  else if (allow_rules_test_cannot_see (test, "com.example.Observer"))
+    {
+      g_test_message ("Checking that confined connections cannot see "
+                      "NameOwnerChanged for com.example.Observer");
+
+      for (iter = f->name_owner_changes.head;
+           iter != NULL;
+           iter = iter->next)
+        {
+          const NameOwnerChange *noc = iter->data;
+
+          g_assert_cmpstr (noc->name, !=, f->observer_unique_name);
+          g_assert_cmpstr (noc->name, !=, "com.example.Observer");
+          g_assert_cmpstr (noc->old_owner, !=, f->observer_unique_name);
+          g_assert_cmpstr (noc->new_owner, !=, f->observer_unique_name);
+        }
+    }
+  else
+    {
+      /* this test makes no particular statement about whether the
+       * observer connection is visible to the container */
+      g_test_message ("Not checking whether confined connections can see "
+                      "NameOwnerChanged for com.example.Observer");
+    }
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -2797,6 +2931,12 @@ main (int argc,
                       teardown);
           g_free (path);
         }
+
+      path = g_strdup_printf ("/containers/allow/%s/see-observer",
+                              test->name);
+      g_test_add (path, Fixture, test,
+                  set_up_allow_test, test_allow_see_observer, teardown);
+      g_free (path);
     }
 
   ret = g_test_run ();
