@@ -407,6 +407,54 @@ assert_request_name_succeeds (GDBusConnection *connection,
   g_assert_cmpuint (result, ==, DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER);
 }
 
+static gboolean
+try_release_name (GDBusConnection *connection,
+                  const gchar *name,
+                  guint32 *result,
+                  GError **error)
+{
+  GVariant *reply;
+
+  reply = g_dbus_connection_call_sync (
+      connection, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
+      "ReleaseName",
+      g_variant_new ("(s)", name),
+      G_VARIANT_TYPE ("(u)"),
+      G_DBUS_CALL_FLAGS_NONE,
+      -1,
+      NULL,
+      error);
+
+  if (reply != NULL)
+    {
+      g_variant_get (reply, "(u)", result);
+
+      if (error != NULL)
+        g_assert_null (*error);
+
+      g_variant_unref (reply);
+      return TRUE;
+    }
+  else if (error != NULL)
+    {
+      g_assert_nonnull (*error);
+    }
+
+  return FALSE;
+}
+
+static void
+assert_release_name_succeeds (GDBusConnection *connection,
+                              const gchar *name)
+{
+  GError *error = NULL;
+  guint32 result;
+
+  try_release_name (connection, name, &result, &error);
+  g_assert_no_error (error);
+  g_assert_cmpuint (result, ==, DBUS_RELEASE_NAME_REPLY_RELEASED);
+}
+
 /*
  * Helper for Allow tests: Assert that GetNameOwner(), NameHasOwner()
  * and the given result of ListNames() agree.
@@ -2435,6 +2483,86 @@ test_allow_list (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for well-known
+ * names owned by the container. If the container can't own any
+ * well-known names then this test is impossible.
+ */
+static void
+test_allow_see_confined_well_known_name (Fixture *f,
+                                         gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const AllowRulesTest *test = context;
+  GList *iter;
+  gboolean saw_acquire;
+  gboolean saw_lose;
+
+  if (f->skip)
+    return;
+
+  /* We assume the container is allowed to own a name. This test is
+   * meaningless otherwise. */
+  g_return_if_fail (test->own_name != NULL);
+
+  /* We gave this name to confined_conns[1] earlier, during setup. Drop
+   * ownership and assert that we saw NameOwnerChanged for both the
+   * acquisition and the loss. */
+
+  g_test_message ("Checking that confined connection 0 saw "
+                  "confined connection 1 gaining/losing name %s",
+                  test->own_name);
+  assert_release_name_succeeds (f->confined_conns[1], test->own_name);
+
+  /* Make sure that if the confined connection was going to get
+   * NameOwnerChanged, it would have done so. */
+  test_sync_gdbus_connections (f->confined_conns[1], f->confined_conns[0]);
+
+  saw_acquire = FALSE;
+  saw_lose = FALSE;
+
+  for (iter = f->name_owner_changes.head;
+       iter != NULL;
+       iter = iter->next)
+    {
+      const NameOwnerChange *noc = iter->data;
+
+      g_test_message (
+          "Past NameOwnerChanged: \"%s\" owner \"%s\" -> \"%s\"",
+          noc->name, noc->old_owner, noc->new_owner);
+
+      if (g_strcmp0 (noc->name, test->own_name) == 0)
+        {
+          if (noc->old_owner[0] == '\0')
+            {
+              g_assert_cmpstr (noc->old_owner, ==, "");
+              g_assert_cmpstr (noc->new_owner, ==,
+                               f->confined_unique_names[1]);
+              g_assert_false (saw_acquire);
+              g_assert_false (saw_lose);
+              saw_acquire = TRUE;
+              g_test_message ("... saw acquisition");
+            }
+          else
+            {
+              g_assert_cmpstr (noc->old_owner, ==,
+                               f->confined_unique_names[1]);
+              g_assert_cmpstr (noc->new_owner, ==, "");
+              g_assert_true (saw_acquire);
+              g_assert_false (saw_lose);
+              saw_lose = TRUE;
+              g_test_message ("... saw loss");
+            }
+        }
+    }
+
+  g_assert_true (saw_acquire);
+  g_assert_true (saw_lose);
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -2657,6 +2785,18 @@ main (int argc,
       g_test_add (path, Fixture, test,
                   set_up_allow_test, test_allow_list, teardown);
       g_free (path);
+
+      if (test->own_name != NULL)
+        {
+          path = g_strdup_printf (
+              "/containers/allow/%s/see-confined-well-known-name",
+              test->name);
+          g_test_add (path, Fixture, test,
+                      set_up_allow_test,
+                      test_allow_see_confined_well_known_name,
+                      teardown);
+          g_free (path);
+        }
     }
 
   ret = g_test_run ();
