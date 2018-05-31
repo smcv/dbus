@@ -778,3 +778,42 @@ test_store_result_cb (GObject *source_object G_GNUC_UNUSED,
   g_assert_null (*result_p);
   *result_p = g_object_ref (result);
 }
+
+/*
+ * Send a Ping() call from a sender to a destination, and wait for the
+ * destination to reply. By the time we get the reply, the destination
+ * must have received any prior signals from the sender that it was
+ * going to receive, and similarly the sender must have received any
+ * prior signals from the destination.
+ */
+void
+test_sync_gdbus_connections (GDBusConnection *caller,
+                             GDBusConnection *callee)
+{
+  GVariant *tuple;
+  GError *error = NULL;
+  GAsyncResult *result = NULL;
+
+  g_return_if_fail (G_IS_DBUS_CONNECTION (caller));
+  g_return_if_fail (G_IS_DBUS_CONNECTION (callee));
+
+  g_test_message ("Synchronizing caller %p with callee %p...", caller, callee);
+
+  g_dbus_connection_call (caller,
+                          g_dbus_connection_get_unique_name (callee),
+                          "/", DBUS_INTERFACE_PEER, "Ping",
+                          NULL, G_VARIANT_TYPE_UNIT,
+                          G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                          test_store_result_cb, &result);
+
+  while (result == NULL)
+    g_main_context_iteration (NULL, TRUE);
+
+  tuple = g_dbus_connection_call_finish (caller, result, &error);
+
+  g_assert_no_error (error);
+  g_assert_nonnull (tuple);
+  g_variant_unref (tuple);
+
+  g_test_message ("Synchronized caller %p with callee %p", caller, callee);
+}
