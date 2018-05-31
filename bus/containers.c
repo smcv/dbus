@@ -1550,9 +1550,31 @@ bus_containers_check_can_activate (DBusConnection *caller,
                                    const char *name,
                                    DBusError *error)
 {
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+#endif
+
   _dbus_assert (caller != NULL);
   _dbus_assert (name != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  instance = connection_get_instance (caller);
+
+  if (instance == NULL)
+    return TRUE;
+
+  if (instance->has_policy)
+    {
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "Connection \"%s\" (%s) is in a container that is "
+                      "not allowed to activate \"%s\"",
+                      bus_connection_get_name (caller),
+                      bus_connection_get_loginfo (caller),
+                      name);
+      return FALSE;
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
 
   return TRUE;
 }
