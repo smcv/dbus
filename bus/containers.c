@@ -1565,9 +1565,34 @@ bus_containers_check_can_own (DBusConnection *connection,
                               const char *bus_name,
                               DBusError *error)
 {
+#ifdef DBUS_ENABLE_CONTAINERS
+  BusContainerInstance *instance;
+#endif
+
   _dbus_assert (connection != NULL);
   _dbus_assert (bus_name != NULL);
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  instance = connection_get_instance (connection);
+
+  if (instance == NULL)
+    return TRUE;
+
+  if (instance->has_policy)
+    {
+      /* TODO: Later we should iterate through the policy and see
+       * whether it allows owning the name, but for now we assume that
+       * the only non-trivial policy is "forbid all" */
+      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                      "Connection \"%s\" (%s) is in a container that is "
+                      "not allowed to own name \"%s\"",
+                      bus_connection_get_name (connection),
+                      bus_connection_get_loginfo (connection),
+                      bus_name);
+      return FALSE;
+    }
+#endif /* DBUS_ENABLE_CONTAINERS */
 
   return TRUE;
 }
