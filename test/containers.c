@@ -1514,6 +1514,59 @@ test_max_connections_per_container (Fixture *f,
 #endif /* !HAVE_CONTAINERS_TEST */
 }
 
+/*
+ * Test what happens when we exceed max_container_metadata_bytes.
+ * test_metadata() exercises the non-excessive case with the same
+ * configuration.
+ */
+static void
+test_max_container_metadata_bytes (Fixture *f,
+                                   gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  /* Must be >= max_container_metadata_bytes in limit-containers.conf, so that
+   * when the serialization overhead, app-container type and app name are
+   * added, it is too much for the limit */
+  guchar waste_of_space[4096] = { 0 };
+  GVariant *tuple;
+  GVariant *parameters;
+  GVariantDict dict;
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  g_variant_dict_init (&dict, NULL);
+  g_variant_dict_insert (&dict, "waste of space", "@ay",
+                         g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE,
+                                                    waste_of_space,
+                                                    sizeof (waste_of_space),
+                                                    1));
+
+  /* Floating reference, call_..._sync takes ownership */
+  parameters = g_variant_new ("(ss@a{sv}a{sv})",
+                              "com.wasteheadquarters",
+                              "Packt Like Sardines in a Crushd Tin Box",
+                              g_variant_dict_end (&dict),
+                              NULL); /* no named arguments */
+
+  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer", parameters,
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_LIMITS_EXCEEDED);
+  g_assert_null (tuple);
+  g_clear_error (&f->error);
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -1588,59 +1641,6 @@ teardown (Fixture *f,
   g_free (f->bus_address);
   g_clear_error (&f->error);
   test_main_context_unref (f->ctx);
-}
-
-/*
- * Test what happens when we exceed max_container_metadata_bytes.
- * test_metadata() exercises the non-excessive case with the same
- * configuration.
- */
-static void
-test_max_container_metadata_bytes (Fixture *f,
-                                   gconstpointer context)
-{
-#ifdef HAVE_CONTAINERS_TEST
-  /* Must be >= max_container_metadata_bytes in limit-containers.conf, so that
-   * when the serialization overhead, app-container type and app name are
-   * added, it is too much for the limit */
-  guchar waste_of_space[4096] = { 0 };
-  GVariant *tuple;
-  GVariant *parameters;
-  GVariantDict dict;
-
-  if (f->skip)
-    return;
-
-  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
-                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
-                                    NULL, DBUS_SERVICE_DBUS,
-                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
-                                    NULL, &f->error);
-  g_assert_no_error (f->error);
-
-  g_variant_dict_init (&dict, NULL);
-  g_variant_dict_insert (&dict, "waste of space", "@ay",
-                         g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE,
-                                                    waste_of_space,
-                                                    sizeof (waste_of_space),
-                                                    1));
-
-  /* Floating reference, call_..._sync takes ownership */
-  parameters = g_variant_new ("(ss@a{sv}a{sv})",
-                              "com.wasteheadquarters",
-                              "Packt Like Sardines in a Crushd Tin Box",
-                              g_variant_dict_end (&dict),
-                              NULL); /* no named arguments */
-
-  tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer", parameters,
-                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
-  g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_LIMITS_EXCEEDED);
-  g_assert_null (tuple);
-  g_clear_error (&f->error);
-
-#else /* !HAVE_CONTAINERS_TEST */
-  g_test_skip ("Containers or gio-unix-2.0 not supported");
-#endif /* !HAVE_CONTAINERS_TEST */
 }
 
 static const Config stop_server_explicitly =
