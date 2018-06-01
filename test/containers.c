@@ -370,7 +370,9 @@ static gboolean add_container_server (Fixture *f,
 typedef struct
 {
   guint flags;
-  /* TODO: There will be more content here later */
+  const char *bus_name;
+  const char *object_path;
+  const char *interface_and_maybe_member;
 } AllowRule;
 
 /*
@@ -1908,6 +1910,106 @@ test_allow_see_confined_unique_name (Fixture *f,
 }
 
 /*
+ * Test what happens when we provide invalid content for the Allow
+ * named parameter.
+ */
+static void
+test_invalid_allow_rules (Fixture *f,
+                          gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  guint i;
+  /* The contents of this array haven't been fully designed yet, but
+   * the current assumption is that each rule will be a (usos) struct. */
+  static const char * const variants[] =
+    {
+      "@au []",       /* array of non-structs */
+      "@a(uso) []",   /* array of truncated struct */
+      "@a(usox) []",  /* array of the wrong struct */
+      "@a(usoss) []", /* array of over-long struct */
+      "false"         /* not even an array */
+    };
+  static const AllowRule rules[] =
+    {
+      /* So far no valid rules have been defined, so anything is
+       * invalid; but it's reasonable to assume that the flags being
+       * all-ones are not going to be valid any time soon. Similarly,
+       * we can confidently say that "nope" is not a valid bus name or
+       * a valid interface name. */
+      { 0xFFFFFFFFU, "com.example.Valid", "/", "com.example.Valid" },
+      { 0, "nope", "/", "com.example.Valid" },
+      { 0, "com.example.Valid", "/", "nope" }
+    };
+
+  if (f->skip)
+    return;
+
+  f->proxy = g_dbus_proxy_new_sync (f->unconfined_conn,
+                                    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+                                    NULL, DBUS_SERVICE_DBUS,
+                                    DBUS_PATH_DBUS, DBUS_INTERFACE_CONTAINERS1,
+                                    NULL, &f->error);
+  g_assert_no_error (f->error);
+
+  for (i = 0; i < G_N_ELEMENTS (variants); i++)
+    {
+      GVariant *tuple;
+      GVariant *parameters;
+      GVariantDict named_argument_builder;
+
+      g_variant_dict_init (&named_argument_builder, NULL);
+      g_variant_dict_insert_value (&named_argument_builder, "Allow",
+                                   g_variant_new_parsed (variants[i]));
+      /* These are deliberately the same parameters as in test_basic(),
+       * except that there is an Allow named parameter, which means
+       * the InvalidArgs error must have been caused by the invalid
+       * Allow rules. */
+      parameters = g_variant_new ("(ssa{sv}@a{sv})",
+                                  "com.example.NotFlatpak",
+                                  "sample-app",
+                                  NULL,
+                                  g_variant_dict_end (&named_argument_builder));
+
+      tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer", parameters,
+                                      G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+      g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+      g_assert_null (tuple);
+      g_clear_error (&f->error);
+    }
+
+  for (i = 0; i < G_N_ELEMENTS (rules); i++)
+    {
+      GVariant *tuple;
+      GVariant *parameters;
+      GVariantDict named_argument_builder;
+
+      g_variant_dict_init (&named_argument_builder, NULL);
+      g_variant_dict_insert_value (
+          &named_argument_builder, "Allow",
+          g_variant_new_parsed ("[(%u, %s, %o, %s)]",
+                                rules[i].flags,
+                                rules[i].bus_name,
+                                rules[i].object_path,
+                                rules[i].interface_and_maybe_member));
+      parameters = g_variant_new ("(ssa{sv}@a{sv})",
+                                  "com.example.NotFlatpak",
+                                  "sample-app",
+                                  NULL,
+                                  g_variant_dict_end (&named_argument_builder));
+
+      tuple = g_dbus_proxy_call_sync (f->proxy, "AddServer", parameters,
+                                      G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+      g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS);
+      g_assert_null (tuple);
+      g_clear_error (&f->error);
+    }
+
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -2111,6 +2213,8 @@ main (int argc,
   g_test_add ("/containers/max-container-metadata-bytes", Fixture,
               &limit_containers,
               setup, test_max_container_metadata_bytes, teardown);
+  g_test_add ("/containers/invalid-allow-rules", Fixture, NULL,
+              setup, test_invalid_allow_rules, teardown);
 
   for (i = 0; i < G_N_ELEMENTS (allow_rules_tests); i++)
     {
