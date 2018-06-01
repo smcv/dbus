@@ -67,12 +67,15 @@ typedef struct {
     gchar *socket_dbus_address;
     GDBusConnection *unconfined_conn;
     gchar *unconfined_unique_name;
+    guint unconfined_filter;
     GDBusConnection *confined_conns[2];
     gchar *confined_unique_names[2];
+    guint confined_filters[2];
 
     GDBusConnection *observer_conn;
     GDBusProxy *observer_proxy;
     gchar *observer_unique_name;
+    guint observer_filter;
     GHashTable *containers_removed;
     guint removed_sub;
     DBusConnection *libdbus_observer;
@@ -213,6 +216,10 @@ fixture_disconnect_unconfined (Fixture *f)
     {
       GError *error = NULL;
 
+      if (f->unconfined_filter != 0)
+        g_dbus_connection_remove_filter (f->unconfined_conn,
+                                         f->unconfined_filter);
+
       g_dbus_connection_close_sync (f->unconfined_conn, NULL, &error);
 
       if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CLOSED))
@@ -233,6 +240,10 @@ fixture_disconnect_observer (Fixture *f)
 
       g_dbus_connection_signal_unsubscribe (f->observer_conn,
                                             f->removed_sub);
+
+      if (f->observer_filter != 0)
+        g_dbus_connection_remove_filter (f->observer_conn,
+                                         f->observer_filter);
 
       g_dbus_connection_close_sync (f->observer_conn, NULL, &error);
 
@@ -279,6 +290,10 @@ fixture_disconnect_confined (Fixture *f,
       if (i == 0 && f->confined_0_noc_sub != 0)
         g_dbus_connection_signal_unsubscribe (f->confined_conns[i],
                                               f->confined_0_noc_sub);
+
+      if (f->confined_filters[i] != 0)
+        g_dbus_connection_remove_filter (f->confined_conns[i],
+                                         f->confined_filters[i]);
 
       g_dbus_connection_close_sync (f->confined_conns[i], NULL, &error);
 
@@ -522,6 +537,49 @@ fixture_assert_name_visibility (Fixture *f,
   g_assert_cmpint (is_visible, ==, b);
 
   g_assert_cmpint (is_visible, ==, g_strv_contains (names, name));
+}
+
+/* A magic string that does not appear in any message that we expect to
+ * be allowed through. We use this because otherwise, it's difficult
+ * to tell the difference between various replies. When we add more
+ * general message filtering, it will also provide an easy way to
+ * assert that messages are blocked at the dbus-daemon and never arrive
+ * at the addressed destination. */
+#define UNDELIVERABLE_CONTENTS \
+  "This content should not have been delivered"
+
+/*
+ * Helper for Allow tests, used to detect unsolicited replies.
+ *
+ * Note that this is invoked in the worker thread.
+ */
+static GDBusMessage *
+allow_tests_message_filter (GDBusConnection *connection,
+                            GDBusMessage *message,
+                            gboolean incoming,
+                            gpointer user_data)
+{
+  GVariant *body;
+
+  /* We only care about incoming messages here; outgoing messages can
+   * be ignored. */
+  if (!incoming)
+    return message;
+
+  body = g_dbus_message_get_body (message);
+
+  if (body != NULL &&
+      g_variant_is_of_type (body, G_VARIANT_TYPE ("(s)")))
+    {
+      const gchar *s;
+
+      g_variant_get (body, "(&s)", &s);
+
+      if (g_strcmp0 (s, UNDELIVERABLE_CONTENTS) == 0)
+        g_error ("Message with special marker should not have been received");
+    }
+
+  return message;
 }
 
 static gboolean add_container_server (Fixture *f,
@@ -888,6 +946,17 @@ set_up_allow_test (Fixture *f,
    * if allowed to do so. */
   assert_request_name_succeeds (f->unconfined_conn, "com.example.Unconfined");
   assert_request_name_succeeds (f->observer_conn, "com.example.Observer");
+
+  /* Implement various method calls on the connections we will
+   * use as possible method call destinations */
+  f->unconfined_filter = g_dbus_connection_add_filter (
+      f->unconfined_conn, allow_tests_message_filter, NULL, NULL);
+  f->observer_filter = g_dbus_connection_add_filter (
+      f->observer_conn, allow_tests_message_filter, NULL, NULL);
+
+  for (i = 0; i < G_N_ELEMENTS (f->confined_conns); i++)
+    f->confined_filters[i] = g_dbus_connection_add_filter (
+        f->confined_conns[i], allow_tests_message_filter, NULL, NULL);
 #endif
 }
 
@@ -2697,6 +2766,130 @@ test_allow_see_observer (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for unsolicited
+ * replies.
+ */
+static void
+test_allow_no_unsolicited_replies (Fixture *f,
+                                   gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  GAsyncResult *result = NULL;
+  guint i;
+  GDBusMessage *message_with_reply;
+  GDBusMessage *message_without_reply;
+  GDBusMessage *reply_message;
+  guint32 without_reply_serial;
+  guint32 with_reply_serial;
+  guint use_error_reply;
+
+  if (f->skip)
+    return;
+
+  /* Regardless of the ruleset, a container is not allowed to send
+   * a reply to a message from outside that was not expecting a reply,
+   * or a second reply to a message that was expecting a reply. */
+
+  g_test_message ("Checking that confined connections cannot send "
+                  "unsolicited replies");
+
+  message_without_reply = g_dbus_message_new_method_call (
+      f->confined_unique_names[0], "/", DBUS_INTERFACE_PEER, "Ping");
+  g_dbus_message_set_flags (message_without_reply,
+                            G_DBUS_MESSAGE_FLAGS_NO_REPLY_EXPECTED);
+  message_with_reply = g_dbus_message_new_method_call (
+      f->confined_unique_names[0], "/", DBUS_INTERFACE_PEER, "Ping");
+
+  g_dbus_connection_send_message (f->unconfined_conn,
+                                  message_without_reply,
+                                  G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+                                  &without_reply_serial,
+                                  &f->error);
+  g_assert_no_error (f->error);
+  g_assert_cmpuint (without_reply_serial, !=, 0);
+
+  result = NULL;
+  g_dbus_connection_send_message_with_reply (f->unconfined_conn,
+                                             message_with_reply,
+                                             G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+                                             -1,
+                                             &with_reply_serial,
+                                             NULL,
+                                             test_store_result_cb,
+                                             &result);
+  g_assert_cmpuint (with_reply_serial, !=, 0);
+
+  while (result == NULL)
+    g_main_context_iteration (NULL, TRUE);
+
+  reply_message = g_dbus_connection_send_message_with_reply_finish (
+      f->unconfined_conn, result, &f->error);
+  g_assert_no_error (f->error);
+  g_assert_cmpint (g_dbus_message_get_message_type (reply_message), ==,
+                   G_DBUS_MESSAGE_TYPE_METHOD_RETURN);
+
+  /* Sending a completely unexpected reply is forbidden, so this
+   * won't arrive at the unconfined connection and trip the check
+   * in allow_tests_message_filter(). */
+  for (use_error_reply = 0; use_error_reply < 2; use_error_reply++)
+    {
+      guint32 reply_serials[] =
+      {
+        /* The serial number of a message that wasn't meant to get
+         * a reply */
+        without_reply_serial,
+        /* The serial number of a message that already had a reply */
+        with_reply_serial,
+        /* A serial number that hasn't been used yet */
+        with_reply_serial + 42
+      };
+
+      for (i = 0; i < G_N_ELEMENTS (reply_serials); i++)
+        {
+          GDBusMessage *unsolicited_reply;
+          guint32 reply_serial = reply_serials[i];
+
+          unsolicited_reply = g_dbus_message_new ();
+          g_dbus_message_set_destination (unsolicited_reply,
+                                          f->unconfined_unique_name);
+          g_dbus_message_set_body (unsolicited_reply,
+              g_variant_new ("(s)", UNDELIVERABLE_CONTENTS));
+
+          if (use_error_reply == 0)
+            {
+              g_dbus_message_set_message_type (
+                  unsolicited_reply, G_DBUS_MESSAGE_TYPE_METHOD_RETURN);
+            }
+          else
+            {
+              g_dbus_message_set_message_type (
+                  unsolicited_reply, G_DBUS_MESSAGE_TYPE_ERROR);
+              g_dbus_message_set_error_name (unsolicited_reply,
+                  "com.example.Pwned");
+            }
+
+          g_dbus_message_set_reply_serial (unsolicited_reply,
+                                           reply_serial);
+          g_dbus_connection_send_message (f->confined_conns[0],
+                                          unsolicited_reply,
+                                          G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+                                          NULL, &f->error);
+          g_assert_no_error (f->error);
+
+          /* Assert that the confined connection didn't get disconnected,
+           * and the unconfined connection that is watching it didn't
+           * crash with a g_error() as it would if the unsolicited
+           * reply was received */
+          test_sync_gdbus_connections (f->unconfined_conn,
+                                       f->confined_conns[0]);
+        }
+    }
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -2936,6 +3129,13 @@ main (int argc,
                               test->name);
       g_test_add (path, Fixture, test,
                   set_up_allow_test, test_allow_see_observer, teardown);
+      g_free (path);
+
+      path = g_strdup_printf ("/containers/allow/%s/no-unsolicited-replies",
+                              test->name);
+      g_test_add (path, Fixture, test,
+                  set_up_allow_test, test_allow_no_unsolicited_replies,
+                  teardown);
       g_free (path);
     }
 
