@@ -407,6 +407,75 @@ assert_request_name_succeeds (GDBusConnection *connection,
   g_assert_cmpuint (result, ==, DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER);
 }
 
+/*
+ * Helper for Allow tests: Assert that GetNameOwner(), NameHasOwner()
+ * and the given result of ListNames() agree.
+ *
+ * @names is really a (const gchar * const *) but it's passed via a
+ * gconstpointer to avoid a lot of very ugly casts.
+ */
+static void
+fixture_assert_name_visibility (Fixture *f,
+                                const gchar *name,
+                                gboolean is_visible,
+                                gconstpointer names)
+{
+  GVariant *reply;
+  gboolean b;
+
+  g_test_message ("Checking that GetNameOwner, NameHasOwner and ListNames "
+                  "all agree that the confined connection %s see \"%s\"",
+                  is_visible ? "can" : "cannot", name);
+
+  reply = g_dbus_connection_call_sync (f->confined_conns[0],
+                                       DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS,
+                                       DBUS_INTERFACE_DBUS,
+                                       "GetNameOwner",
+                                       g_variant_new ("(s)", name),
+                                       G_VARIANT_TYPE ("(s)"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+
+  if (is_visible)
+    {
+      const gchar *s;
+
+      g_assert_no_error (f->error);
+      g_assert_nonnull (reply);
+
+      if (name[0] == ':')
+        {
+          g_variant_get (reply, "(&s)", &s);
+          g_assert_cmpstr (name, ==, s);
+        }
+
+      g_clear_pointer (&reply, g_variant_unref);
+    }
+  else
+    {
+      g_assert_error (f->error, G_DBUS_ERROR, G_DBUS_ERROR_NAME_HAS_NO_OWNER);
+      g_clear_error (&f->error);
+    }
+
+  reply = g_dbus_connection_call_sync (f->confined_conns[0],
+                                       DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS,
+                                       DBUS_INTERFACE_DBUS,
+                                       "NameHasOwner",
+                                       g_variant_new ("(s)", name),
+                                       G_VARIANT_TYPE ("(b)"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+
+  g_assert_no_error (f->error);
+  g_assert_nonnull (reply);
+  g_variant_get (reply, "(b)", &b);
+  g_assert_cmpint (is_visible, ==, b);
+
+  g_assert_cmpint (is_visible, ==, g_strv_contains (names, name));
+}
+
 static gboolean add_container_server (Fixture *f,
                                       GVariant *parameters);
 #endif
@@ -453,6 +522,10 @@ typedef struct
   /* Can be terminated early by an entry with flags 0 */
   const AllowRule rules[16];
   const char *own_name;
+  /* Can be terminated early by an entry with type NULL */
+  const char * const can_see_names[16];
+  /* Can be terminated early by an entry with type NULL */
+  const char * const cannot_see_names[16];
 } AllowRulesTest;
 
 static const AllowRulesTest allow_rules_tests[] =
@@ -463,6 +536,20 @@ static const AllowRulesTest allow_rules_tests[] =
 
     { /* rules: no rules */
       { 0 }
+    },
+    /* own_name: We can (and will) own this name */
+    "com.example.Confined",
+    { /* can_see_names: We can see these names */
+      "org.freedesktop.DBus",
+      "com.example.Confined",
+      "com.example.Observer",
+      "com.example.SystemdActivatable1",
+      "com.example.Unconfined",
+      NULL
+    },
+    {
+      /* cannot_see_names: We can't see these names */
+      NULL
     }
   },
 
@@ -471,9 +558,73 @@ static const AllowRulesTest allow_rules_tests[] =
     "empty-allow", ALLOW_TEST_FLAGS_NONE,
     { /* rules: no rules */
       { 0 }
+    },
+    /* own_name: We will not be allowed to own a name when that
+     * restriction is implemented, so don't try */
+    NULL,
+    { /* can_see_names: We can see these names */
+      "org.freedesktop.DBus",
+      NULL
+    },
+    { /* cannot_see_names: We can't see these names (even after
+       * com.example.Unconfined calls a method on us, which will
+       * eventually allow us to see its unique name) */
+      "com.example.Confined",
+      "com.example.Observer",
+      "com.example.SystemdActivatable1",
+      "com.example.Unconfined",
+      NULL
     }
   }
 };
+
+#ifdef HAVE_CONTAINERS_TEST
+/*
+ * Return TRUE if the test says @name should be visible to the confined
+ * connections, or FALSE if either it should not be visible or there is
+ * no guarantee either way.
+ */
+static gboolean
+allow_rules_test_can_see (const AllowRulesTest *test,
+                          const char *name)
+{
+  guint i;
+
+  for (i = 0; i < G_N_ELEMENTS (test->can_see_names); i++)
+    {
+      if (test->can_see_names[i] == NULL)
+        break;
+
+      if (g_strcmp0 (name, test->can_see_names[i]) == 0)
+        return TRUE;
+    }
+
+  return FALSE;
+}
+
+/*
+ * Return TRUE if the test says @name should be not visible to the
+ * confined connections, or FALSE if either it should be visible or
+ * there is no guarantee either way.
+ */
+static gboolean
+allow_rules_test_cannot_see (const AllowRulesTest *test,
+                             const char *name)
+{
+  guint i;
+
+  for (i = 0; i < G_N_ELEMENTS (test->cannot_see_names); i++)
+    {
+      if (test->cannot_see_names[i] == NULL)
+        break;
+
+      if (g_strcmp0 (name, test->cannot_see_names[i]) == 0)
+        return TRUE;
+    }
+
+  return FALSE;
+}
+#endif
 
 static void
 setup (Fixture *f,
@@ -554,6 +705,38 @@ setup (Fixture *f,
       NULL);
 }
 
+#ifdef HAVE_CONTAINERS_TEST
+/* Names that are made activatable by systemd-activation.conf. This
+ * list does not have to be exhaustive (and in particular we skip
+ * org.freedesktop.systemd1 here because that's really just a
+ * workaround), it just has to be enough for testing. */
+static const char * const activatable_names[] =
+{
+  "com.example.ReceiveDenied",
+  "com.example.ReceiveDeniedByAppArmorLabel",
+  "com.example.SendDenied",
+  "com.example.SendDeniedByAppArmorLabel",
+  "com.example.SendDeniedByAppArmorName",
+  "com.example.SendDeniedByNonexistentAppArmorLabel",
+  "com.example.SystemdActivatable1",
+  "com.example.SystemdActivatable2",
+  "com.example.SystemdActivatable3",
+  /* For some reason this counts as activatable too */
+  "org.freedesktop.DBus"
+};
+#endif
+
+/*
+ * A Config with some activatable services, because test_allow() needs
+ * to test ListActivatableNames, and to do that we need to be able to
+ * predict what's in it.
+ */
+static const Config config_with_activatables =
+{
+  "valid-config-files/systemd-activation.conf",
+  0 /* not relevant for this test */
+};
+
 static void
 set_up_allow_test (Fixture *f,
                    gconstpointer context)
@@ -568,7 +751,7 @@ set_up_allow_test (Fixture *f,
 
   /* Normally setup() assumes context is a const Config *, but
    * test_allow() needs to use context for the const AllowRulesTest *. */
-  setup (f, NULL);
+  setup (f, &config_with_activatables);
 
 #ifdef HAVE_CONTAINERS_TEST
   if (f->skip)
@@ -651,6 +834,12 @@ set_up_allow_test (Fixture *f,
         }
     }
 
+  /* Give the unconfined connections well-known names so we can refer
+   * to them later. We do this after connecting the confined connections
+   * so that they will see the resulting NameOwnerChanged messages,
+   * if allowed to do so. */
+  assert_request_name_succeeds (f->unconfined_conn, "com.example.Unconfined");
+  assert_request_name_succeeds (f->observer_conn, "com.example.Observer");
 #endif
 }
 
@@ -2108,6 +2297,144 @@ test_invalid_allow_rules (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for ListNames and
+ * ListActivatableNames.
+ */
+static void
+test_allow_list (Fixture *f,
+                 gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const AllowRulesTest *test = context;
+  GVariant *reply = NULL;
+  guint i;
+  gchar **names;
+
+  if (f->skip)
+    return;
+
+  /* Use the unconfined (manager) connection to contact a confined
+   * connection. This should make the unconfined connection's unique
+   * name, but not the observer connection's unique name, visible to
+   * all the confined connections. */
+  test_sync_gdbus_connections (f->unconfined_conn, f->confined_conns[1]);
+
+  /* When we list owned names, we only see the well-known names we can
+   * SEE (by well-known name), plus the unique names we can SEE, plus
+   * the bus driver. */
+  g_test_message ("Confined connection calling ListNames");
+  reply = g_dbus_connection_call_sync (f->confined_conns[0],
+                                       DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS,
+                                       DBUS_INTERFACE_DBUS,
+                                       "ListNames",
+                                       NULL, G_VARIANT_TYPE ("(as)"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (reply);
+  g_variant_get (reply, "(^as)", &names, NULL);
+
+  for (i = 0; names[i] != NULL; i++)
+    g_test_message ("-> %s", names[i]);
+
+  g_test_message ("-> (end)");
+
+  /* Confined connections can always see the dbus-daemon */
+  fixture_assert_name_visibility (f, DBUS_SERVICE_DBUS, TRUE, names);
+  /* Confined connections can always see what's in the same container */
+  fixture_assert_name_visibility (f, f->confined_unique_names[0], TRUE, names);
+  fixture_assert_name_visibility (f, f->confined_unique_names[1], TRUE, names);
+
+  /* The unconfined connection sent messages to us, so that
+   * automatically opens up SEE access to its unique name, because
+   * otherwise we'd get contradictory answers to our questions and
+   * become hopelessly confused.
+   */
+#if 0
+  /* TODO: Not yet implemented */
+  fixture_assert_name_visibility (f, f->unconfined_unique_name, TRUE, names);
+#endif
+
+  /* We know the observer never sent messages to us in this test,
+   * hence its name; so we can see it if and only if we are allowed
+   * to see its well-known name. */
+  if (allow_rules_test_can_see (test, "com.example.Observer"))
+    fixture_assert_name_visibility (f, f->observer_unique_name, TRUE, names);
+  else
+    fixture_assert_name_visibility (f, f->observer_unique_name, FALSE, names);
+
+  /* When we probe well-known names, we can only see the names we
+   * should. Having been sent messages by the unique name that
+   * owns that well-known name is not enough. */
+  if (allow_rules_test_can_see (test, "com.example.Unconfined"))
+    fixture_assert_name_visibility (f, "com.example.Unconfined", TRUE, names);
+  else if (allow_rules_test_cannot_see (test, "com.example.Unconfined"))
+    fixture_assert_name_visibility (f, "com.example.Unconfined", FALSE, names);
+  /* else the test makes no particular statement about that name */
+
+  if (allow_rules_test_can_see (test, "com.example.Observer"))
+    fixture_assert_name_visibility (f, "com.example.Observer", TRUE, names);
+  else if (allow_rules_test_cannot_see (test, "com.example.Observer"))
+    fixture_assert_name_visibility (f, "com.example.Observer", FALSE, names);
+  /* else the test makes no particular statement about that name */
+
+  g_strfreev (names);
+  g_clear_pointer (&reply, g_variant_unref);
+
+  /* When we list activatable names, we only see the names we can
+   * SEE (by well-known name) plus possibly the bus driver. */
+  g_test_message ("Confined connection calling ListActivatableNames");
+  reply = g_dbus_connection_call_sync (f->confined_conns[0],
+                                       DBUS_SERVICE_DBUS,
+                                       DBUS_PATH_DBUS,
+                                       DBUS_INTERFACE_DBUS,
+                                       "ListActivatableNames",
+                                       NULL, G_VARIANT_TYPE ("(as)"),
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
+                                       &f->error);
+  g_assert_no_error (f->error);
+  g_assert_nonnull (reply);
+  g_variant_get (reply, "(^as)", &names, NULL);
+
+  for (i = 0; names[i] != NULL; i++)
+    g_test_message ("-> %s", names[i]);
+
+  g_test_message ("-> (end)");
+
+  /* For each name that is meant to be activatable, if it is one that
+   * the test specifies we are allowed to see, we did in fact see it */
+  for (i = 0; i < G_N_ELEMENTS (activatable_names); i++)
+    {
+      const gchar *name = activatable_names[i];
+
+      if (allow_rules_test_can_see (test, name))
+        g_assert_true (g_strv_contains ((const gchar * const *) names, name));
+      /* else this test makes no particular statement about being
+       * allowed to see that name */
+    }
+
+  /* For each name we can see as activatable, assert that either it's
+   * one we are allowed to see, or the test makes no particular
+   * statement about */
+  for (i = 0; i < G_N_ELEMENTS (names); i++)
+    {
+      const gchar *name = names[i];
+
+      if (name == NULL)
+        break;
+
+      g_assert_false (allow_rules_test_cannot_see (test, name));
+    }
+
+  g_strfreev (names);
+  g_clear_pointer (&reply, g_variant_unref);
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -2324,6 +2651,11 @@ main (int argc,
       g_test_add (path, Fixture, test,
                   set_up_allow_test, test_allow_see_confined_unique_name,
                   teardown);
+      g_free (path);
+
+      path = g_strdup_printf ("/containers/allow/%s/list", test->name);
+      g_test_add (path, Fixture, test,
+                  set_up_allow_test, test_allow_list, teardown);
       g_free (path);
     }
 
