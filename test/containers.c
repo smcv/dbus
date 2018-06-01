@@ -676,6 +676,28 @@ allow_tests_message_filter (GDBusConnection *connection,
   return NULL;
 }
 
+/*
+ * Helper for Allow tests: GDBusSignalCallback that counts how many
+ * times we got a particular signal.
+ */
+static void
+count_signal_cb (GDBusConnection *connection,
+                 const gchar *sender_name,
+                 const gchar *object_path,
+                 const gchar *interface_name,
+                 const gchar *signal_name,
+                 GVariant *parameters,
+                 gpointer user_data)
+{
+  guint *counter = user_data;
+
+  g_test_message ("Connection %p received %s.%s from %s:%s",
+                  connection, interface_name, signal_name,
+                  sender_name, object_path);
+
+  *counter += 1;
+}
+
 static gboolean add_container_server (Fixture *f,
                                       GVariant *parameters);
 #endif
@@ -781,6 +803,41 @@ typedef struct
 } AllowMethodCall;
 
 /*
+ * The result of a signal that we should or shouldn't be able to send
+ */
+typedef enum
+{
+  /* Signal should be delivered */
+  SIGNAL_DELIVERED,
+  /* Signal should not be delivered */
+  SIGNAL_NOT_DELIVERED,
+
+  /* Array terminator */
+  SIGNAL_INVALID = 0
+} AllowSignalResult;
+
+/*
+ * A signal that we should or shouldn't be able to send
+ */
+typedef struct
+{
+  AllowSignalResult result;
+  /* The destination, or NULL for a broadcast signal */
+  const char *bus_name;
+  /* The source object path */
+  const char *object_path;
+  /* The interface */
+  const char *iface;
+  /* The member name. Some member names are given special meaning
+   * as a short-cut for defining test cases, for example AddMatch
+   * gets a valid match rule. */
+  const char *member;
+  /* A string argument or NULL */
+  const char *argument;
+  AllowMessageFlags flags;
+} AllowSignal;
+
+/*
  * Flags affecting an entire test-case
  */
 typedef enum
@@ -811,6 +868,8 @@ typedef struct
   const char * const cannot_see_names[16];
   /* Can be terminated early by an entry with result INVALID */
   const AllowMethodCall method_calls[64];
+  /* Can be terminated early by an entry with result INVALID */
+  const AllowSignal signals[64];
 } AllowRulesTest;
 
 static const AllowRulesTest allow_rules_tests[] =
@@ -1040,6 +1099,45 @@ static const AllowRulesTest allow_rules_tests[] =
         ALLOW_MESSAGE_FLAGS_NONE },
 
       { METHOD_INVALID }    /* sentinel */
+    },
+    { /* signals: */
+
+      /* Peers inside the container may communicate among themselves */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May receive unicast signals from outside */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+
+      /* May send fds to outside */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* May receive fds from outside */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE | ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* May receive broadcasts from outside */
+      { SIGNAL_DELIVERED,
+        NULL, "/", "com.example.Foo", "BroadcastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+
+      /* May send unicast signals to outside */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      { SIGNAL_INVALID }    /* sentinel */
     }
   },
 
@@ -1313,6 +1411,49 @@ static const AllowRulesTest allow_rules_tests[] =
 #endif
 
       { METHOD_INVALID }     /* sentinel */
+    },
+    { /* signals: */
+
+      /* Peers inside the container may communicate among themselves */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_CONFINED_1_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      /* May receive unicast signals from outside */
+      { SIGNAL_DELIVERED,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+
+      /* We can't test whether sending fds to dbus-daemon in a
+       * signal is allowed (but it's academic, because it's going to
+       * receive them whether it wants to or not) */
+
+      /* Must not send fds to outside */
+      { SIGNAL_NOT_DELIVERED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* Must not receive fds from outside */
+      { SIGNAL_NOT_DELIVERED,
+        REPLACE_WITH_CONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE | ALLOW_MESSAGE_FLAGS_SEND_FD },
+
+      /* Must not receive broadcasts from outside */
+      { SIGNAL_NOT_DELIVERED,
+        NULL, "/", "com.example.Foo", "BroadcastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE },
+
+      /* Must not send unicast signals to outside */
+      { SIGNAL_NOT_DELIVERED,
+        REPLACE_WITH_UNCONFINED_UNIQUE_NAME, "/",
+        "com.example.Foo", "UnicastSignal", NULL,
+        ALLOW_MESSAGE_FLAGS_NONE },
+
+      { SIGNAL_INVALID }    /* sentinel */
     }
   }
 };
@@ -3811,6 +3952,282 @@ test_allow_methods (Fixture *f,
 }
 
 /*
+ * Assert that the given Allow rules work as intended for signals.
+ */
+static void
+test_allow_signals (Fixture *f,
+                    gconstpointer context)
+{
+#ifdef HAVE_CONTAINERS_TEST
+  const AllowRulesTest *test = context;
+  guint i;
+
+  if (f->skip)
+    return;
+
+  /* This is the data-driven part of the test: try sending a lot of
+   * messages and see what happens. */
+  for (i = 0; i < G_N_ELEMENTS (test->signals); i++)
+    {
+      const AllowSignal *signal = &test->signals[i];
+      const gchar *bus_name = signal->bus_name;
+      GDBusConnection *initiator;
+      const gchar *initiator_description;
+      GDBusConnection *confined_signal_receiver = NULL;
+      GDBusConnection *unconfined_signal_receiver = NULL;
+      const gchar *confined_signal_receiver_name = NULL;
+      const gchar *unconfined_signal_receiver_name = NULL;
+      guint unconfined_subscription = 0;
+      guint confined_subscription = 0;
+      guint received_confined = 0;
+      guint received_unconfined = 0;
+
+      if (signal->result == SIGNAL_INVALID)
+        break;
+
+      g_test_message ("%s %s #%d", G_STRFUNC, test->name, i);
+
+      /* do not test g_dbus_is_name() until after we have substituted
+       * special strings like REPLACE_WITH_CONFINED_UNIQUE_NAME */
+      g_assert (signal->object_path != NULL);
+      g_assert (g_variant_is_object_path (signal->object_path));
+      g_assert (signal->iface != NULL);
+      g_assert (g_dbus_is_interface_name (signal->iface));
+      g_assert (signal->member != NULL);
+      g_assert (g_dbus_is_member_name (signal->member));
+      /* this flag would be meaningless here */
+      g_assert (!(signal->flags & ALLOW_MESSAGE_FLAGS_FD_IN_REPLY));
+
+      if (signal->flags & ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE)
+        {
+          initiator = f->unconfined_conn;
+          initiator_description = "unconfined connection";
+        }
+      else
+        {
+          initiator = f->confined_conns[0];
+          initiator_description = "confined connection";
+        }
+
+      if (g_strcmp0 (bus_name, REPLACE_WITH_CONFINED_UNIQUE_NAME) == 0)
+        bus_name = f->confined_unique_names[0];
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_CONFINED_1_UNIQUE_NAME) == 0)
+        bus_name = f->confined_unique_names[1];
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_UNCONFINED_UNIQUE_NAME) == 0)
+        bus_name = f->unconfined_unique_name;
+      else if (g_strcmp0 (bus_name, REPLACE_WITH_OBSERVER_UNIQUE_NAME) == 0)
+        bus_name = f->observer_unique_name;
+      else
+        g_assert (bus_name == NULL || bus_name[0] != ':');
+
+      g_assert (bus_name == NULL || g_dbus_is_name (bus_name));
+
+      g_assert (signal->result == SIGNAL_DELIVERED ||
+                signal->result == SIGNAL_NOT_DELIVERED);
+
+      if (signal->flags & ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE)
+        {
+          /* We only send messages from the unconfined connection if
+           * they are going to the first confined connection; there's
+           * no point in distinguishing between confined connections,
+           * and we aren't testing communication that doesn't involve
+           * at least one confined connection. */
+          g_assert_true (bus_name == NULL ||
+              g_strcmp0 (signal->bus_name,
+                  REPLACE_WITH_CONFINED_UNIQUE_NAME) == 0);
+          confined_signal_receiver = f->confined_conns[0];
+          confined_signal_receiver_name = "confined connection 0";
+          unconfined_signal_receiver = f->observer_conn;
+          unconfined_signal_receiver_name = "observer";
+        }
+      else if (bus_name == NULL)
+        {
+          /* It's a broadcast to unconfined and confined connections.
+           * Use the other confined connection to see who
+           * receives it. */
+          confined_signal_receiver = f->confined_conns[1];
+          confined_signal_receiver_name = "confined connection 1";
+          unconfined_signal_receiver = f->observer_conn;
+          unconfined_signal_receiver_name = "observer";
+        }
+      else if (g_strcmp0 (signal->bus_name,
+                          REPLACE_WITH_CONFINED_1_UNIQUE_NAME) == 0)
+        {
+          /* It's unicast to the other confined connection */
+          confined_signal_receiver = f->confined_conns[1];
+          confined_signal_receiver_name = "confined connection 1";
+          unconfined_signal_receiver = NULL;
+        }
+      else
+        {
+          /* It's unicast to the unconfined connection */
+          confined_signal_receiver = NULL;
+          g_assert_cmpstr (signal->bus_name, ==,
+                           REPLACE_WITH_UNCONFINED_UNIQUE_NAME);
+          unconfined_signal_receiver = f->unconfined_conn;
+          unconfined_signal_receiver_name = "unconfined connection";
+        }
+
+      if (confined_signal_receiver != NULL)
+        confined_subscription = g_dbus_connection_signal_subscribe (
+            confined_signal_receiver,
+            g_dbus_connection_get_unique_name (initiator),
+            signal->iface,
+            signal->member,
+            signal->object_path,
+            NULL,
+            G_DBUS_SIGNAL_FLAGS_NONE,
+            count_signal_cb,
+            &received_confined,
+            NULL);
+
+      if (unconfined_signal_receiver != NULL)
+        unconfined_subscription = g_dbus_connection_signal_subscribe (
+            unconfined_signal_receiver,
+            g_dbus_connection_get_unique_name (initiator),
+            signal->iface,
+            signal->member,
+            signal->object_path,
+            NULL,
+            G_DBUS_SIGNAL_FLAGS_NONE,
+            count_signal_cb,
+            &received_unconfined,
+            NULL);
+
+      g_test_message ("%s sending signal", initiator_description);
+
+      if (bus_name == NULL)
+        g_test_message ("... broadcast");
+      else if (g_strcmp0 (signal->bus_name, bus_name) != 0)
+        g_test_message ("... unicast to %s (%s)", signal->bus_name,
+                        bus_name);
+      else
+        g_test_message ("... unicast to %s", bus_name);
+
+      g_test_message ("... path %s", signal->object_path);
+      g_test_message ("... %s.%s", signal->iface, signal->member);
+
+      if (signal->flags & ALLOW_MESSAGE_FLAGS_SEND_FD)
+        {
+          GDBusMessage *s;
+
+          g_test_message ("... with attached file descriptor");
+          s = g_dbus_message_new_signal (signal->object_path,
+                                         signal->iface,
+                                         signal->member);
+
+          if (bus_name != NULL)
+            g_dbus_message_set_destination (s, bus_name);
+
+          message_set_body_to_unix_fd (s);
+          g_dbus_connection_send_message (initiator, s,
+                                          G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+                                          NULL, &f->error);
+          g_object_unref (s);
+        }
+      else
+        {
+          g_dbus_connection_emit_signal (initiator,
+                                         bus_name,
+                                         signal->object_path,
+                                         signal->iface,
+                                         signal->member,
+                                         NULL,
+                                         &f->error);
+        }
+
+      g_assert_no_error (f->error);
+
+      /* Sync up the connections. Because messages are delivered
+       * in-order, if the signal hasn't been received by the time a
+       * ping involving the same two connections has completed,
+       * then it never will be. */
+      if (initiator == f->unconfined_conn)
+        {
+          if (unconfined_signal_receiver != NULL)
+            test_sync_gdbus_connections (initiator,
+                                         unconfined_signal_receiver);
+
+          if (confined_signal_receiver != NULL)
+            test_sync_gdbus_connections (initiator,
+                                         confined_signal_receiver);
+        }
+      else
+        {
+          g_assert (initiator == f->confined_conns[0]);
+
+          /* If the initiator was the confined connection, it might
+           * not be allowed to contact the unconfined connection,
+           * so we do this backwards, using the reply rather than
+           * the call to enforce ordering. */
+          if (unconfined_signal_receiver != NULL)
+            test_sync_gdbus_connections (unconfined_signal_receiver,
+                                         initiator);
+
+          if (confined_signal_receiver != NULL)
+            test_sync_gdbus_connections (initiator,
+                                         confined_signal_receiver);
+        }
+
+      if (unconfined_signal_receiver != NULL)
+        {
+          g_dbus_connection_signal_unsubscribe (unconfined_signal_receiver,
+                                                unconfined_subscription);
+          g_test_message ("-> %u signal(s) received by %s <%p>",
+                          received_unconfined,
+                          unconfined_signal_receiver_name,
+                          unconfined_signal_receiver);
+        }
+
+      if (confined_signal_receiver != NULL)
+        {
+          g_dbus_connection_signal_unsubscribe (confined_signal_receiver,
+                                                confined_subscription);
+          g_test_message ("-> %u signal(s) received by %s <%p>",
+                          received_confined,
+                          confined_signal_receiver_name,
+                          confined_signal_receiver);
+        }
+
+      if (signal->flags & ALLOW_MESSAGE_FLAGS_INITIATOR_OUTSIDE)
+        {
+          /* If it was sent from outside, whether it goes to
+           * our confined connection is determined by signal->result. */
+          g_assert_cmpuint (received_confined, ==,
+                            (signal->result == SIGNAL_DELIVERED));
+          /* If it was a broadcast, it always goes to unconfined
+           * connections (in this case we use the observer)
+           * even if it wasn't delivered in the container. */
+          if (bus_name == NULL)
+            g_assert_cmpuint (received_unconfined, ==, 1);
+        }
+      else if (bus_name == NULL)
+        {
+          /* If it's a broadcast, then it always goes to other
+           * connections within the container, and signal->result
+           * indicates whether it should have left the container. */
+          g_assert_cmpuint (received_confined, ==, 1);
+          g_assert_cmpuint (received_unconfined, ==,
+                            (signal->result == SIGNAL_DELIVERED));
+        }
+      else
+        {
+          /* If it's a unicast, then signal->result represents
+           * whether it should get to its destination. */
+          if (confined_signal_receiver != NULL)
+            g_assert_cmpuint (received_confined, ==,
+                              (signal->result == SIGNAL_DELIVERED));
+          else
+            g_assert_cmpuint (received_unconfined, ==,
+                              (signal->result == SIGNAL_DELIVERED));
+        }
+    }
+#else /* !HAVE_CONTAINERS_TEST */
+  g_test_skip ("Containers or gio-unix-2.0 not supported");
+#endif /* !HAVE_CONTAINERS_TEST */
+}
+
+/*
  * Test what happens when we exceed max_container_metadata_bytes.
  * test_metadata() exercises the non-excessive case with the same
  * configuration.
@@ -4062,6 +4479,11 @@ main (int argc,
       path = g_strdup_printf ("/containers/allow/%s/methods", test->name);
       g_test_add (path, Fixture, test,
                   set_up_allow_test, test_allow_methods, teardown);
+      g_free (path);
+
+      path = g_strdup_printf ("/containers/allow/%s/signals", test->name);
+      g_test_add (path, Fixture, test,
+                  set_up_allow_test, test_allow_signals, teardown);
       g_free (path);
     }
 
