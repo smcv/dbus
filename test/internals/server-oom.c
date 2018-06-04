@@ -121,10 +121,10 @@ main (int argc,
   test_init (&argc, &argv);
 
   test_cases_to_free = g_queue_new ();
-  add_oom_test ("/server/new-tcp", test_new_server, "tcp:host=localhost,bind=localhost");
-  add_oom_test ("/server/new-nonce-tcp", test_new_server, "nonce-tcp:host=localhost,bind=localhost");
-  add_oom_test ("/server/new-tcp-star", test_new_server, "tcp:host=localhost,bind=*");
-  add_oom_test ("/server/new-tcp-v4", test_new_server, "tcp:host=localhost,bind=localhost,family=ipv4");
+  add_oom_test ("/server/new-tcp", test_new_server, "tcp:host=127.0.0.1,bind=127.0.0.1");
+  add_oom_test ("/server/new-nonce-tcp", test_new_server, "nonce-tcp:host=127.0.0.1,bind=127.0.0.1");
+  add_oom_test ("/server/new-tcp-star", test_new_server, "tcp:host=127.0.0.1,bind=*");
+  add_oom_test ("/server/new-tcp-v4", test_new_server, "tcp:host=127.0.0.1,bind=127.0.0.1,family=ipv4");
 #ifdef DBUS_UNIX
   add_oom_test ("/server/unix", test_new_server, "unix:tmpdir=/tmp");
 #endif
