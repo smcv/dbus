@@ -38,31 +38,15 @@
 /* Return TRUE if the right thing happens, but the right thing might include
  * OOM. */
 static dbus_bool_t
-test_new_tcp (void        *user_data,
-              dbus_bool_t  have_memory)
+test_new_server (void        *user_data,
+                 dbus_bool_t  have_memory)
 {
+  const char *listen_address = user_data;
   DBusError error = DBUS_ERROR_INIT;
   DBusServer *server = NULL;
-  dbus_bool_t use_nonce = FALSE;
-  const char *bind = "localhost";
-  const char *family = NULL;
   dbus_bool_t result = FALSE;
 
-  if (user_data != NULL)
-    {
-      if (strcmp (user_data, "nonce") == 0)
-        use_nonce = TRUE;
-
-      if (strcmp (user_data, "star") == 0)
-        bind = "*";
-
-      if (strcmp (user_data, "v4") == 0)
-        family = "ipv4";
-    }
-
-  server = _dbus_server_new_for_tcp_socket ("localhost", bind,
-                                            "0", family, &error,
-                                            use_nonce);
+  server = dbus_server_listen (listen_address, &error);
 
   if (server == NULL)
     goto out;
@@ -137,10 +121,10 @@ main (int argc,
   test_init (&argc, &argv);
 
   test_cases_to_free = g_queue_new ();
-  add_oom_test ("/server/new-tcp", test_new_tcp, NULL);
-  add_oom_test ("/server/new-nonce-tcp", test_new_tcp, "nonce");
-  add_oom_test ("/server/new-tcp-star", test_new_tcp, "star");
-  add_oom_test ("/server/new-tcp-v4", test_new_tcp, "v4");
+  add_oom_test ("/server/new-tcp", test_new_server, "tcp:host=localhost,bind=localhost");
+  add_oom_test ("/server/new-nonce-tcp", test_new_server, "nonce-tcp:host=localhost,bind=localhost");
+  add_oom_test ("/server/new-tcp-star", test_new_server, "tcp:host=localhost,bind=*");
+  add_oom_test ("/server/new-tcp-v4", test_new_server, "tcp:host=localhost,bind=localhost,family=ipv4");
 
   ret = g_test_run ();
 
