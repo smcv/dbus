@@ -223,7 +223,12 @@ setup (Fixture *f,
 
   dbus_error_init (&f->e);
 
+#ifdef DBUS_UNIX
+  f->server = dbus_server_listen ("unix:tmpdir=/tmp", &f->e);
+#else
   f->server = dbus_server_listen ("tcp:host=127.0.0.1", &f->e);
+#endif
+
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
 

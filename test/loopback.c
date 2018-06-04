@@ -467,6 +467,9 @@ main (int argc,
   g_test_add ("/message/nonce-tcp", Fixture, "nonce-tcp:host=127.0.0.1", setup,
       test_message, teardown);
 
+  g_test_add ("/message/bad-guid/tcp", Fixture, "tcp:host=127.0.0.1", setup,
+      test_bad_guid, teardown);
+
 #ifdef DBUS_UNIX
   g_test_add ("/connect/unix/tmpdir", Fixture, "unix:tmpdir=/tmp", setup,
       test_connect, teardown);
@@ -483,10 +486,10 @@ main (int argc,
   g_test_add ("/connect/unix/no-runtime", Fixture,
       "unix:runtime=yes;unix:tmpdir=/tmp", setup_no_runtime, test_connect,
       teardown_no_runtime);
-#endif
 
-  g_test_add ("/message/bad-guid", Fixture, "tcp:host=127.0.0.1", setup,
+  g_test_add ("/message/bad-guid/unix", Fixture, "unix:tmpdir=/tmp", setup,
       test_bad_guid, teardown);
+#endif
 
   return g_test_run ();
 }

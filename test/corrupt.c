@@ -395,5 +395,10 @@ main (int argc,
   g_test_add ("/corrupt/byte-order/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_byte_order, teardown);
 
+#ifdef DBUS_UNIX
+  g_test_add ("/corrupt/byte-order/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_byte_order, teardown);
+#endif
+
   return g_test_run ();
 }

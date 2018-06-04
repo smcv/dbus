@@ -120,7 +120,7 @@ new_conn_cb (DBusServer *server,
 
 static void
 setup (Fixture *f,
-    gconstpointer data G_GNUC_UNUSED)
+       gconstpointer address)
 {
   test_timeout_reset (1);
 
@@ -128,7 +128,7 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
   g_queue_init (&f->messages);
 
-  f->server = dbus_server_listen ("tcp:host=127.0.0.1", &f->e);
+  f->server = dbus_server_listen (address, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
 
@@ -321,12 +321,21 @@ main (int argc,
 {
   test_init (&argc, &argv);
 
-  g_test_add ("/connect", Fixture, NULL, setup,
+  g_test_add ("/connect/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_connect, teardown);
-  g_test_add ("/relay", Fixture, NULL, setup,
+  g_test_add ("/relay/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_relay, teardown);
-  g_test_add ("/limit", Fixture, NULL, setup,
+  g_test_add ("/limit/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_limit, teardown);
+
+#ifdef DBUS_UNIX
+  g_test_add ("/connect/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_connect, teardown);
+  g_test_add ("/relay/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_relay, teardown);
+  g_test_add ("/limit/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_limit, teardown);
+#endif
 
   return g_test_run ();
 }
