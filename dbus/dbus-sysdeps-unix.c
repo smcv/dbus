@@ -1325,6 +1325,56 @@ _dbus_listen_systemd_sockets (DBusSocket **fds,
 #endif
 }
 
+/* Convert an error code from getaddrinfo() or getnameinfo() into
+ * a D-Bus error name. */
+static const char *
+_dbus_error_from_gai (int gai_res,
+                      int saved_errno)
+{
+  switch (gai_res)
+    {
+#ifdef EAI_FAMILY
+      case EAI_FAMILY:
+        /* ai_family not supported (at all) */
+        return DBUS_ERROR_NOT_SUPPORTED;
+#endif
+
+#ifdef EAI_SOCKTYPE
+      case EAI_SOCKTYPE:
+        /* ai_socktype not supported (at all) */
+        return DBUS_ERROR_NOT_SUPPORTED;
+#endif
+
+#ifdef EAI_MEMORY
+      case EAI_MEMORY:
+        /* Out of memory */
+        return DBUS_ERROR_NO_MEMORY;
+#endif
+
+#ifdef EAI_SYSTEM
+      case EAI_SYSTEM:
+        /* Unspecified system error, details in errno */
+        return _dbus_error_from_errno (saved_errno);
+#endif
+
+      case 0:
+        /* It succeeded, but we didn't get any addresses? */
+        return DBUS_ERROR_FAILED;
+
+      /* EAI_AGAIN: Transient failure */
+      /* EAI_BADFLAGS: invalid ai_flags (programming error) */
+      /* EAI_FAIL: Non-recoverable failure */
+      /* EAI_NODATA: host exists but has no addresses */
+      /* EAI_NONAME: host does not exist */
+      /* EAI_OVERFLOW: argument buffer overflow */
+      /* EAI_SERVICE: service not available for specified socket
+       * type (we should never see this because we use numeric
+       * ports) */
+      default:
+        return DBUS_ERROR_FAILED;
+    }
+}
+
 /**
  * Creates a socket and connects to a socket at the given host
  * and port. The connection fd is returned, and is set up as
@@ -1386,7 +1436,7 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
   if ((res = getaddrinfo(host, port, &hints, &ai)) != 0)
     {
       dbus_set_error (error,
-                      _dbus_error_from_errno (errno),
+                      _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host, port, gai_strerror(res), res);
       _dbus_socket_invalidate (&fd);
@@ -1545,7 +1595,7 @@ _dbus_listen_tcp_socket (const char     *host,
   if ((res = getaddrinfo(host, port, &hints, &ai)) != 0 || !ai)
     {
       dbus_set_error (error,
-                      _dbus_error_from_errno (errno),
+                      _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host ? host : "*", port, gai_strerror(res), res);
       goto failed;
@@ -1673,16 +1723,26 @@ _dbus_listen_tcp_socket (const char     *host,
               addrlen = sizeof(addr);
               result = getsockname(fd, (struct sockaddr*) &addr, &addrlen);
 
-              if (result == -1 ||
-                  (res = getnameinfo ((struct sockaddr*)&addr, addrlen, NULL, 0,
+              if (result == -1)
+                {
+                  saved_errno = errno;
+                  dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                                  "Failed to retrieve socket name for \"%s:%s\": %s",
+                                  host ? host : "*", port, _dbus_strerror (saved_errno));
+                  goto failed;
+                }
+
+              if ((res = getnameinfo ((struct sockaddr*)&addr, addrlen, NULL, 0,
                                       portbuf, sizeof(portbuf),
                                       NI_NUMERICHOST | NI_NUMERICSERV)) != 0)
                 {
-                  dbus_set_error (error, _dbus_error_from_errno (errno),
+                  saved_errno = errno;
+                  dbus_set_error (error, _dbus_error_from_gai (res, saved_errno),
                                   "Failed to resolve port \"%s:%s\": %s (%d)",
                                   host ? host : "*", port, gai_strerror(res), res);
                   goto failed;
                 }
+
               if (!_dbus_string_append(retport, portbuf))
                 {
                   dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
