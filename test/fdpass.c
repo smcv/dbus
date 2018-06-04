@@ -79,6 +79,7 @@ _DBUS_STATIC_ASSERT (MAX_MESSAGE_UNIX_FDS < TOO_MANY_FDS);
 typedef struct {
     TestMainContext *ctx;
     DBusError e;
+    gboolean skip;
 
     DBusServer *server;
 
@@ -172,6 +173,9 @@ test_connect (Fixture *f,
 {
   char *address;
 
+  if (f->skip)
+    return;
+
   g_assert (f->left_server_conn == NULL);
   g_assert (f->right_server_conn == NULL);
 
@@ -251,6 +255,14 @@ setup_common (Fixture *f,
   dbus_error_init (&f->e);
   g_queue_init (&f->messages);
 
+  if ((g_str_has_prefix (address, "tcp:") ||
+       g_str_has_prefix (address, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    {
+      f->skip = TRUE;
+      return;
+    }
+
   f->server = dbus_server_listen (address, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
@@ -289,6 +301,9 @@ static void
 test_unsupported (Fixture *f,
     gconstpointer data)
 {
+  if (f->skip)
+    return;
+
   test_connect (f, FALSE);
 
   if (dbus_connection_can_send_type (f->left_client_conn,
@@ -320,6 +335,9 @@ test_relay (Fixture *f,
   int fd_after;
   struct stat stat_before;
   struct stat stat_after;
+
+  if (f->skip)
+    return;
 
   test_connect (f, TRUE);
 
@@ -403,6 +421,9 @@ test_limit (Fixture *f,
   DBusMessage *outgoing, *incoming;
   int i;
 
+  if (f->skip)
+    return;
+
   test_connect (f, TRUE);
 
   outgoing = dbus_message_new_signal ("/com/example/Hello",
@@ -461,6 +482,9 @@ test_too_many (Fixture *f,
   DBusMessage *outgoing;
   unsigned int i;
 
+  if (f->skip)
+    return;
+
   test_connect (f, TRUE);
 
   outgoing = dbus_message_new_signal ("/com/example/Hello",
@@ -513,6 +537,12 @@ test_too_many_split (Fixture *f,
   DBusString buffer;
   int fds[TOO_MANY_FDS];
   int done;
+#ifdef HAVE_GETRLIMIT
+  struct rlimit lim;
+#endif
+
+  if (f->skip)
+    return;
 
   /* This test deliberately pushes up against OS limits, so skip it
    * if we don't have enough fds. 4 times the maximum per message
@@ -520,8 +550,6 @@ test_too_many_split (Fixture *f,
    * we actually send, the copy that we potentially receive, and some
    * spare capacity for everything else. */
 #ifdef HAVE_GETRLIMIT
-  struct rlimit lim;
-
   if (getrlimit (RLIMIT_NOFILE, &lim) == 0)
     {
       if (lim.rlim_cur != RLIM_INFINITY &&
@@ -643,6 +671,9 @@ test_flood (Fixture *f,
   DBusMessage *outgoing[SOME_MESSAGES];
   dbus_uint32_t serial;
 
+  if (f->skip)
+    return;
+
   test_connect (f, TRUE);
 
   for (j = 0; j < SOME_MESSAGES; j++)
@@ -714,6 +745,9 @@ test_odd_limit (Fixture *f,
 #ifdef HAVE_UNIX_FD_PASSING
   DBusMessage *outgoing;
   int i;
+
+  if (f->skip)
+    return;
 
   test_connect (f, TRUE);
   dbus_connection_set_max_message_unix_fds (f->left_server_conn, 7);

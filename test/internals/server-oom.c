@@ -85,6 +85,11 @@ test_oom_wrapper (gconstpointer data)
 {
   const OOMTestCase *test = data;
 
+  if ((g_str_has_prefix (test->data, "tcp:") ||
+       g_str_has_prefix (test->data, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    return;
+
   if (!_dbus_test_oom_handling (test->name, test->function,
                                 (void *) test->data))
     {

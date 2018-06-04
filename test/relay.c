@@ -46,6 +46,7 @@
 typedef struct {
     TestMainContext *ctx;
     DBusError e;
+    gboolean skip;
 
     DBusServer *server;
 
@@ -128,6 +129,14 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
   g_queue_init (&f->messages);
 
+  if ((g_str_has_prefix (address, "tcp:") ||
+       g_str_has_prefix (address, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    {
+      f->skip = TRUE;
+      return;
+    }
+
   f->server = dbus_server_listen (address, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
@@ -143,6 +152,9 @@ test_connect (Fixture *f,
 {
   dbus_bool_t have_mem;
   char *address;
+
+  if (f->skip)
+    return;
 
   g_assert (f->left_server_conn == NULL);
   g_assert (f->right_server_conn == NULL);
@@ -205,6 +217,9 @@ test_relay (Fixture *f,
 {
   DBusMessage *incoming;
 
+  if (f->skip)
+    return;
+
   test_connect (f, data);
 
   send_one (f, "First");
@@ -236,6 +251,9 @@ test_limit (Fixture *f,
 {
   DBusMessage *incoming;
   guint i;
+
+  if (f->skip)
+    return;
 
   test_connect (f, data);
 

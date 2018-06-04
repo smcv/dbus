@@ -36,6 +36,7 @@
 typedef struct {
     DBusError e;
     TestMainContext *ctx;
+    gboolean skip;
 
     DBusServer *server;
     DBusConnection *server_conn;
@@ -85,6 +86,14 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
   g_queue_init (&f->client_messages);
 
+  if ((g_str_has_prefix (addr, "tcp:") ||
+       g_str_has_prefix (addr, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    {
+      f->skip = TRUE;
+      return;
+    }
+
   f->server = dbus_server_listen (addr, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
@@ -100,6 +109,9 @@ test_connect (Fixture *f,
 {
   dbus_bool_t have_mem;
   char *address = NULL;
+
+  if (f->skip)
+    return;
 
   g_assert (f->server_conn == NULL);
 
@@ -128,6 +140,9 @@ test_message (Fixture *f,
   dbus_bool_t have_mem;
   dbus_uint32_t serial;
   DBusMessage *outgoing, *incoming;
+
+  if (f->skip)
+    return;
 
   test_connect (f, addr);
 
@@ -213,6 +228,9 @@ test_corrupt (Fixture *f,
   int fd;
   DBusMessage *incoming;
 
+  if (f->skip)
+    return;
+
   test_message (f, addr);
 
   dbus_connection_flush (f->server_conn);
@@ -276,6 +294,9 @@ test_byte_order (Fixture *f,
   int blob_len;
   DBusMessage *message;
   dbus_bool_t mem;
+
+  if (f->skip)
+    return;
 
   test_message (f, addr);
 

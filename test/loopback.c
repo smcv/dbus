@@ -41,6 +41,7 @@
 typedef struct {
     TestMainContext *ctx;
     DBusError e;
+    gboolean skip;
 
     DBusServer *server;
     DBusConnection *server_conn;
@@ -98,6 +99,14 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
   g_queue_init (&f->server_messages);
 
+  if ((g_str_has_prefix (addr, "tcp:") ||
+       g_str_has_prefix (addr, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    {
+      f->skip = TRUE;
+      return;
+    }
+
   f->server = dbus_server_listen (addr, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
@@ -125,6 +134,9 @@ setup_runtime (Fixture *f,
 
   setup (f, addr);
 
+  if (f->skip)
+    return;
+
   listening_at = dbus_server_get_address (f->server);
   g_test_message ("listening at %s", listening_at);
   g_assert (g_str_has_prefix (listening_at, "unix:path="));
@@ -147,6 +159,9 @@ setup_no_runtime (Fixture *f,
 
   setup (f, addr);
 
+  if (f->skip)
+    return;
+
   listening_at = dbus_server_get_address (f->server);
   g_test_message ("listening at %s", listening_at);
   /* we have fallen back to something in /tmp, either abstract or not */
@@ -168,6 +183,9 @@ test_connect (Fixture *f,
   DBusString cred_string;
   int n_entries;
   dbus_bool_t ok;
+
+  if (f->skip)
+    return;
 
   g_assert (f->server_conn == NULL);
 
@@ -294,13 +312,17 @@ test_bad_guid (Fixture *f,
     gconstpointer addr G_GNUC_UNUSED)
 {
   DBusMessage *incoming;
-  char *address = dbus_server_get_address (f->server);
+  char *address;
   gchar *guid;
+
+  if (f->skip)
+    return;
 
   g_test_bug ("39720");
 
   g_assert (f->server_conn == NULL);
 
+  address = dbus_server_get_address (f->server);
   g_assert (strstr (address, "guid=") != NULL);
   guid = strstr (address, "guid=");
   g_assert_cmpuint (strlen (guid), >=, 5 + 32);
@@ -355,6 +377,9 @@ test_message (Fixture *f,
   dbus_bool_t have_mem;
   dbus_uint32_t serial;
   DBusMessage *outgoing, *incoming;
+
+  if (f->skip)
+    return;
 
   test_connect (f, addr);
 

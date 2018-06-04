@@ -121,4 +121,6 @@ backported_g_steal_pointer (gpointer pointer_to_pointer)
 }
 #endif
 
+gboolean test_check_tcp_works (void);
+
 #endif
