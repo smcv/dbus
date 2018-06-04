@@ -817,3 +817,20 @@ test_sync_gdbus_connections (GDBusConnection *caller,
 
   g_test_message ("Synchronized caller %p with callee %p", caller, callee);
 }
+
+#if !GLIB_CHECK_VERSION(2, 44, 0)
+gboolean
+backported_g_strv_contains (const gchar * const *haystack,
+                            const gchar *needle)
+{
+  const gchar * const *iter;
+
+  for (iter = haystack; iter != NULL && *iter != NULL; iter++)
+    {
+      if (g_str_equal (needle, *iter))
+        return TRUE;
+    }
+
+  return FALSE;
+}
+#endif
