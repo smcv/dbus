@@ -482,7 +482,13 @@ bus_container_instance_lost_connection (BusContainerInstance *instance,
   if (_dbus_list_remove (&instance->connections, connection))
     dbus_connection_unref (connection);
 
-  dbus_connection_set_data (connection, contained_data_slot, NULL, NULL);
+  /* We don't set connection's contained_data_slot to NULL, to make sure
+   * that once we have marked a connection as belonging to a container,
+   * there is no going back: even if we somehow keep a reference to it
+   * around, it will never be treated as uncontained. The connection's
+   * reference to the instance will be cleaned up on last-unref, and
+   * the list removal above ensures that the instance does not hold a
+   * circular ref to the connection, so the last-unref will happen. */
 
   dbus_connection_unref (connection);
   bus_container_instance_unref (instance);
@@ -1433,14 +1439,7 @@ bus_containers_remove_connection (BusContainers *self,
   instance = connection_get_instance (connection);
 
   if (instance != NULL)
-    {
-      bus_container_instance_ref (instance);
-
-      if (_dbus_list_remove (&instance->connections, connection))
-        dbus_connection_unref (connection);
-
-      bus_container_instance_unref (instance);
-    }
+    bus_container_instance_lost_connection (instance, connection);
 
   dbus_connection_unref (connection);
 #endif /* DBUS_ENABLE_CONTAINERS */
