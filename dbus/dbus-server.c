@@ -595,6 +595,7 @@ dbus_server_listen (const char     *address,
           else if (result == DBUS_SERVER_LISTEN_ADDRESS_ALREADY_USED)
             {
               _dbus_assert (server == NULL);
+              _DBUS_ASSERT_ERROR_IS_CLEAR (&tmp_error);
               dbus_set_error (error,
                        DBUS_ERROR_ADDRESS_IN_USE,
                        "Address '%s' already used",
