@@ -631,6 +631,10 @@ dbus_server_listen (const char     *address,
               
               /* keep trying addresses */
             }
+          else
+            {
+              _dbus_assert_not_reached ("Unknown result in dbus_server_listen");
+            }
         }
 
       _dbus_assert (server == NULL);
