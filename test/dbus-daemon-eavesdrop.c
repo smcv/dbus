@@ -421,6 +421,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/eavedrop/match_keyword/broadcast", Fixture, NULL,
@@ -431,5 +433,7 @@ main (int argc,
   g_test_add ("/eavedrop/match_keyword/unicast_to_sender", Fixture, NULL,
       setup, test_eavesdrop_unicast_to_sender, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

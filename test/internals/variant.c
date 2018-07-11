@@ -564,10 +564,14 @@ int
 main (int argc,
       char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add_func ("/variant/simple", test_simple);
   g_test_add_func ("/variant/oom", test_oom_handling);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

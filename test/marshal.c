@@ -271,5 +271,6 @@ main (int argc,
   ret = g_test_run ();
   g_free (aligned_le_blob);
   g_free (aligned_be_blob);
+  dbus_shutdown ();
   return ret;
 }

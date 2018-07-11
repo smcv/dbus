@@ -39,6 +39,6 @@ main (int argc, char **argv)
     }
 
   dbus_free(argv_copy);
- 
+  dbus_shutdown ();
   return 0;
 }

@@ -238,6 +238,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   /* UpdateActivationEnvironment used to be allowed by dbus-daemon for root
@@ -257,5 +259,7 @@ main (int argc,
   g_test_add ("/uid-permissions/monitor/other", Fixture, &other_fail_config,
       setup, test_monitor, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

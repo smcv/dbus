@@ -1770,5 +1770,6 @@ main (int argc,
   g_free (runtime_services_dir);
   g_free (runtime_dbus_dir);
   g_free (runtime_dir);
+  dbus_shutdown ();
   return ret;
 }

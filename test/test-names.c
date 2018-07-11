@@ -74,6 +74,6 @@ main (int    argc,
 #endif
 
   _dbus_verbose ("*** Test service name exiting\n");
-  
+  dbus_shutdown ();
   return 0;
 }

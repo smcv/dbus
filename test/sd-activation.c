@@ -1056,6 +1056,7 @@ main (int argc,
     char **argv)
 {
   gsize i;
+  int ret;
 
   test_init (&argc, &argv);
 
@@ -1089,5 +1090,7 @@ main (int argc,
   g_test_add ("/sd-activation/transient-services/in-advance", Fixture,
       &transient_service_in_advance, setup, test_transient_services, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

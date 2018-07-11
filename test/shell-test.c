@@ -184,5 +184,6 @@ main (int argc, char **argv)
    * successful completion. */
   printf ("1..%d\n", test_num);
 
+  dbus_shutdown ();
   return (num_failed != 0);
 }

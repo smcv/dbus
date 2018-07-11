@@ -877,6 +877,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
 #ifdef HAVE_GETRLIMIT
@@ -940,5 +942,7 @@ main (int argc,
   g_test_add ("/odd-limit/plus2", Fixture, GINT_TO_POINTER (+2), setup,
       test_odd_limit, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

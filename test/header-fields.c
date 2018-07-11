@@ -826,5 +826,6 @@ main (int argc,
   ret = g_test_run ();
 
   g_queue_free_full (test_cases_to_free, g_free);
+  dbus_shutdown ();
   return ret;
 }
