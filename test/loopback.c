@@ -419,11 +419,28 @@ static void
 teardown (Fixture *f,
     gconstpointer addr G_GNUC_UNUSED)
 {
-  if (f->client_conn != NULL)
-    dbus_connection_close (f->client_conn);
+  DBusMessage *message;
+
+  g_assert_cmpuint (g_queue_get_length (&f->server_messages), ==, 0);
 
   if (f->server_conn != NULL)
-    dbus_connection_close (f->server_conn);
+    {
+      dbus_connection_remove_filter (f->server_conn, server_message_cb, f);
+      test_connection_shutdown (f->ctx, f->server_conn);
+      dbus_connection_close (f->server_conn);
+
+      while ((message = dbus_connection_pop_message (f->server_conn)))
+        dbus_message_unref (message);
+    }
+
+  if (f->client_conn != NULL)
+    {
+      test_connection_shutdown (f->ctx, f->client_conn);
+      dbus_connection_close (f->client_conn);
+
+      while ((message = dbus_connection_pop_message (f->server_conn)))
+        dbus_message_unref (message);
+    }
 
   dbus_clear_connection (&f->client_conn);
   dbus_clear_connection (&f->server_conn);
@@ -433,6 +450,7 @@ teardown (Fixture *f,
 
   dbus_clear_server (&f->server);
   test_main_context_unref (f->ctx);
+  dbus_error_free (&f->e);
 }
 
 #ifdef DBUS_UNIX
