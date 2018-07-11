@@ -603,7 +603,30 @@ set_timeout (guint factor)
 void
 test_init (int *argcp, char ***argvp)
 {
+  /* If our argv only contained the executable name, assume we were
+   * run by Automake with LOG_COMPILER overridden by
+   * VALGRIND_CHECK_RULES from AX_VALGRIND_CHECK, and automatically switch
+   * on TAP output. This avoids needing glib-tap-test.sh. We still use
+   * glib-tap-test.sh in the common case because it replaces \r\n line
+   * endings with \n, which we need if running the tests under Wine. */
+  static char tap[] = "--tap";
+  static char *substitute_argv[] = { NULL, tap, NULL };
+
+  g_return_if_fail (argcp != NULL);
+  g_return_if_fail (*argcp > 0);
+  g_return_if_fail (argvp != NULL);
+  g_return_if_fail (argvp[0] != NULL);
+  g_return_if_fail (argvp[0][0] != NULL);
+
+  if (*argcp == 1)
+    {
+      substitute_argv[0] = (*argvp)[0];
+      *argcp = 2;
+      *argvp = substitute_argv;
+    }
+
   g_test_init (argcp, argvp, NULL);
+
   g_test_bug_base ("https://bugs.freedesktop.org/show_bug.cgi?id=");
   set_timeout (1);
 }
