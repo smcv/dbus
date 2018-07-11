@@ -48,6 +48,8 @@
 
 #include <dbus/dbus.h>
 
+#include "dbus/dbus-valgrind-internal.h"
+
 #ifdef G_OS_WIN
 # define isatty(x) _isatty(x)
 #endif
@@ -582,6 +584,9 @@ set_timeout (guint factor)
 
   if (timeout != 0)
     g_source_remove (timeout);
+
+  if (RUNNING_ON_VALGRIND)
+    factor = factor * 10;
 
   timeout = g_timeout_add_seconds (TIMEOUT * factor, time_out, NULL);
 #ifdef G_OS_UNIX
