@@ -698,6 +698,7 @@ test_max_connections (Fixture *f,
   dbus_clear_connection (&failing_conn);
   dbus_connection_close (third_conn);
   dbus_clear_connection (&third_conn);
+  dbus_error_free (&error);
 }
 
 static void
