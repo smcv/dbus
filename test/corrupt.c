@@ -391,7 +391,7 @@ teardown (Fixture *f,
 
   if (f->server != NULL)
     {
-      dbus_server_disconnect (f->server);
+      test_server_shutdown (f->ctx, f->server);
       dbus_server_unref (f->server);
       f->server = NULL;
     }
