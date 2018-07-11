@@ -15,6 +15,7 @@ AM_CPPFLAGS = \
 	$(APPARMOR_CFLAGS) \
 	$(GLIB_CFLAGS) \
 	$(GIO_UNIX_CFLAGS) \
+	$(VALGRIND_CFLAGS) \
 	$(NULL)
 
 # improve backtraces from test stuff
