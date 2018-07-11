@@ -302,7 +302,6 @@ test_connect (Fixture *f,
                   _dbus_string_get_const_data (&cred_string));
   g_assert_cmpstr (_dbus_string_get_const_data (&cred_string), !=, NULL);
   _dbus_string_free (&cred_string);
-  _dbus_clear_credentials (&creds);
 
   dbus_free (address);
 }
