@@ -1,0 +1,19 @@
+{
+   GLib type registrations
+   Memcheck:Leak
+   ...
+   fun:g_type_register_fundamental
+}
+{
+   gobject_init
+   Memcheck:Leak
+   ...
+   fun:gobject_init
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   ...
+   fun:g_thread_new
+   fun:g_get_worker_context
+}

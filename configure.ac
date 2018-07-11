@@ -1199,6 +1199,11 @@ fi
 
 AC_SUBST([NETWORK_libs])
 
+# Add check-valgrind, etc. targets
+AX_VALGRIND_CHECK
+AM_EXTRA_RECURSIVE_TARGETS([check-valgrind])
+AM_EXTRA_RECURSIVE_TARGETS([check-valgrind-memcheck])
+
 AC_ARG_WITH([valgrind],
   [AS_HELP_STRING([--with-valgrind],
      [Add instrumentation to help valgrind to understand our allocator])],

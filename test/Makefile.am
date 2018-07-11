@@ -655,3 +655,8 @@ $(installable_test_meta_with_config): %_with_config.test: %$(EXEEXT) Makefile
 
 # Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
 @CODE_COVERAGE_RULES@
+
+# Add rules for valgrind testing, as defined by AX_VALGRIND_CHECK
+@VALGRIND_CHECK_RULES@
+VALGRIND_SUPPRESSIONS_FILES = $(srcdir)/dbus.supp
+EXTRA_DIST += dbus.supp

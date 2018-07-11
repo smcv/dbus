@@ -88,3 +88,14 @@ test_privserver_client_LDADD=../libdbus-testutils.la
 test_autolaunch_LDADD=../libdbus-testutils.la
 
 endif
+
+# Don't use VALGRIND_CHECK_RULES here yet: we're very reliant on
+# LOG_COMPILER for the tests in this directory, and can't cope with
+# AX_VALGRIND_CHECK overriding it to be a valgrind tool.
+check-valgrind-am-dummy:
+	@echo valgrind not supported for test/name-test/ yet
+check-valgrind-am: check-valgrind-am-dummy
+check-valgrind-drd-am: check-valgrind-am-dummy
+check-valgrind-helgrind-am: check-valgrind-am-dummy
+check-valgrind-memcheck-am: check-valgrind-am-dummy
+check-valgrind-sgcheck-am: check-valgrind-am-dummy
