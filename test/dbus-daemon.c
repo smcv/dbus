@@ -2050,6 +2050,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/echo/session", Fixture, NULL, setup, test_echo, teardown);
@@ -2127,5 +2129,7 @@ main (int argc,
               setup, test_fd_limit, teardown);
 #endif
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

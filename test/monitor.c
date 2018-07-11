@@ -1949,6 +1949,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/monitor/invalid", Fixture, NULL,
@@ -1992,5 +1994,7 @@ main (int argc,
       setup, test_activation, teardown);
 #endif
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

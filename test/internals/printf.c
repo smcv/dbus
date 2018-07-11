@@ -105,5 +105,6 @@ main (int argc,
    * This is how it can distinguish between an unexpected exit and
    * successful completion. */
   printf ("1..%d\n", test_num);
+  dbus_shutdown ();
   return 0;
 }
