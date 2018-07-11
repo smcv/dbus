@@ -1171,6 +1171,7 @@ test_peer_get_machine_id (Fixture *f,
           /* When running unit tests during make check or make installcheck,
            * tolerate this */
           g_test_skip ("Machine UUID not available");
+          dbus_error_free (&error);
           return;
         }
       else
