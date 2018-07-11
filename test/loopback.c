@@ -429,7 +429,7 @@ teardown (Fixture *f,
   dbus_clear_connection (&f->server_conn);
 
   if (f->server != NULL)
-    dbus_server_disconnect (f->server);
+    test_server_shutdown (f->ctx, f->server);
 
   dbus_clear_server (&f->server);
   test_main_context_unref (f->ctx);

@@ -424,7 +424,7 @@ test_server (Fixture *f,
 
   /* Destroy the server. This should be the last-unref. */
   g_assert (!f->last_unref);
-  dbus_server_disconnect (f->server);
+  test_server_shutdown (f->loop, f->server);
   dbus_server_unref (f->server);
   f->server = NULL;
   g_assert (f->last_unref);
