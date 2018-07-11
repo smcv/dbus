@@ -685,6 +685,7 @@ dbus_server_listen (const char     *address,
     }
   else
     {
+      dbus_error_free (&first_connect_error);
       _DBUS_ASSERT_ERROR_IS_CLEAR (error);
       return server;
     }
