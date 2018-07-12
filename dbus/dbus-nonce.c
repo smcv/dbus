@@ -383,7 +383,7 @@ do_noncefile_create (DBusNonceFile **noncefile_out,
 
     return TRUE;
   on_error:
-    if (use_subdir)
+    if (use_subdir && _dbus_string_get_length (&noncefile->dir) != 0)
       _dbus_delete_directory (&noncefile->dir, NULL);
     _dbus_string_free (&noncefile->dir);
     _dbus_string_free (&noncefile->path);
