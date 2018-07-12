@@ -1056,6 +1056,7 @@ _dbus_test_oom_handling (const char             *description,
                    description, approx_mallocs);
 
   setting = _dbus_getenv ("DBUS_TEST_MALLOC_FAILURES");
+
   if (setting != NULL)
     {
       DBusString str;
@@ -1069,6 +1070,14 @@ _dbus_test_oom_handling (const char             *description,
   else
     {
       max_failures_to_try = 4;
+    }
+
+  if (RUNNING_ON_VALGRIND && _dbus_getenv ("DBUS_TEST_SLOW") == NULL)
+    {
+      /* The full OOM testing is slow, valgrind is slow, so the
+       * combination is just horrible. Only do this if the user
+       * asked for extra-slow tests. */
+      max_failures_to_try = 0;
     }
 
   if (max_failures_to_try < 1)
