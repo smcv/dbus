@@ -199,6 +199,9 @@ test_endian (Fixture *f,
   /* the second "u" in the signature replaced a padding byte, so only
    * the length of the body changed */
   g_assert_cmpint (len, ==, BLOB_LENGTH + 4);
+
+  dbus_clear_message (&m);
+  dbus_free (output);
 }
 
 static void
