@@ -201,6 +201,7 @@ teardown (Fixture *f,
 
   if (f->conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->conn);
       dbus_connection_close (f->conn);
       dbus_connection_unref (f->conn);
       f->conn = NULL;

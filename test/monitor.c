@@ -1890,6 +1890,7 @@ teardown (Fixture *f,
   if (f->monitor != NULL)
     {
       dbus_connection_remove_filter (f->monitor, monitor_filter, f);
+      test_connection_shutdown (f->ctx, f->monitor);
       dbus_connection_close (f->monitor);
       dbus_connection_unref (f->monitor);
       f->monitor = NULL;
@@ -1897,6 +1898,7 @@ teardown (Fixture *f,
 
   if (f->sender != NULL)
     {
+      test_connection_shutdown (f->ctx, f->sender);
       dbus_connection_close (f->sender);
       dbus_connection_unref (f->sender);
       f->sender = NULL;
@@ -1908,6 +1910,8 @@ teardown (Fixture *f,
       if (f->recipient_enqueue_filter_added)
         dbus_connection_remove_filter (f->recipient, recipient_enqueue_filter,
             f);
+
+      test_connection_shutdown (f->ctx, f->recipient);
       dbus_connection_close (f->recipient);
       dbus_connection_unref (f->recipient);
       f->recipient = NULL;
@@ -1916,6 +1920,7 @@ teardown (Fixture *f,
   if (f->systemd != NULL)
     {
       dbus_connection_remove_filter (f->systemd, systemd_filter, f);
+      test_connection_shutdown (f->ctx, f->systemd);
       dbus_connection_close (f->systemd);
       dbus_connection_unref (f->systemd);
       f->systemd = NULL;
@@ -1924,6 +1929,7 @@ teardown (Fixture *f,
   if (f->activated != NULL)
     {
       dbus_connection_remove_filter (f->activated, activated_filter, f);
+      test_connection_shutdown (f->ctx, f->activated);
       dbus_connection_close (f->activated);
       dbus_connection_unref (f->activated);
       f->activated = NULL;

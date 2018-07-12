@@ -1624,6 +1624,7 @@ teardown (Fixture *f,
     {
       dbus_connection_remove_filter (f->libdbus_observer,
                                      observe_shouting_cb, f);
+      test_connection_shutdown (f->ctx, f->libdbus_observer);
       dbus_connection_close (f->libdbus_observer);
     }
 

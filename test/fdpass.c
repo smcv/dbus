@@ -831,6 +831,7 @@ teardown (Fixture *f,
 {
   if (f->left_client_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->left_client_conn);
       dbus_connection_close (f->left_client_conn);
       dbus_connection_unref (f->left_client_conn);
       f->left_client_conn = NULL;
@@ -838,6 +839,7 @@ teardown (Fixture *f,
 
   if (f->right_client_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->right_client_conn);
       dbus_connection_close (f->right_client_conn);
       dbus_connection_unref (f->right_client_conn);
       f->right_client_conn = NULL;
@@ -845,6 +847,7 @@ teardown (Fixture *f,
 
   if (f->left_server_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->left_server_conn);
       dbus_connection_close (f->left_server_conn);
       dbus_connection_unref (f->left_server_conn);
       f->left_server_conn = NULL;
@@ -852,6 +855,7 @@ teardown (Fixture *f,
 
   if (f->right_server_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->right_server_conn);
       dbus_connection_close (f->right_server_conn);
       dbus_connection_unref (f->right_server_conn);
       f->right_server_conn = NULL;

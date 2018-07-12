@@ -372,6 +372,7 @@ teardown (Fixture *f,
 
   if (f->sender != NULL)
     {
+      test_connection_shutdown (f->ctx, f->sender);
       dbus_connection_close (f->sender);
       dbus_connection_unref (f->sender);
       f->sender = NULL;
@@ -382,6 +383,7 @@ teardown (Fixture *f,
       dbus_connection_remove_filter (f->receiver,
           signal_filter, f);
 
+      test_connection_shutdown (f->ctx, f->receiver);
       dbus_connection_close (f->receiver);
       dbus_connection_unref (f->receiver);
       f->receiver = NULL;
@@ -392,6 +394,7 @@ teardown (Fixture *f,
       dbus_connection_remove_filter (f->politelistener,
           signal_filter, f);
 
+      test_connection_shutdown (f->ctx, f->politelistener);
       dbus_connection_close (f->politelistener);
       dbus_connection_unref (f->politelistener);
       f->politelistener = NULL;
@@ -402,6 +405,7 @@ teardown (Fixture *f,
       dbus_connection_remove_filter (f->eavesdropper,
           signal_filter, f);
 
+      test_connection_shutdown (f->ctx, f->eavesdropper);
       dbus_connection_close (f->eavesdropper);
       dbus_connection_unref (f->eavesdropper);
       f->eavesdropper = NULL;

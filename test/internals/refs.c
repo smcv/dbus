@@ -341,6 +341,7 @@ test_connection (Fixture *f,
 
   /* Destroy the connection. This should be the last-unref. */
   g_assert (!f->last_unref);
+  test_connection_shutdown (f->loop, f->connection);
   dbus_connection_close (f->connection);
   dbus_connection_unref (f->connection);
   f->connection = NULL;
@@ -593,12 +594,14 @@ teardown (Fixture *f,
 {
   if (f->server_connection != NULL)
     {
+      test_connection_shutdown (f->loop, f->server_connection);
       dbus_connection_close (f->server_connection);
       dbus_connection_unref (f->server_connection);
     }
 
   if (f->connection != NULL)
     {
+      test_connection_shutdown (f->loop, f->connection);
       dbus_connection_close (f->connection);
       dbus_connection_unref (f->connection);
     }

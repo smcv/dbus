@@ -420,10 +420,16 @@ teardown (Fixture *f,
     gconstpointer addr G_GNUC_UNUSED)
 {
   if (f->client_conn != NULL)
-    dbus_connection_close (f->client_conn);
+    {
+      test_connection_shutdown (f->ctx, f->client_conn);
+      dbus_connection_close (f->client_conn);
+    }
 
   if (f->server_conn != NULL)
-    dbus_connection_close (f->server_conn);
+    {
+      test_connection_shutdown (f->ctx, f->server_conn);
+      dbus_connection_close (f->server_conn);
+    }
 
   dbus_clear_connection (&f->client_conn);
   dbus_clear_connection (&f->server_conn);

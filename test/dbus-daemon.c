@@ -364,6 +364,7 @@ test_no_reply (Fixture *f,
         test_main_context_iterate (f->ctx, TRUE);
 
       dbus_connection_remove_filter (f->right_conn, echo_filter, f);
+      test_connection_shutdown (f->ctx, f->right_conn);
       dbus_connection_close (f->right_conn);
       dbus_clear_connection (&f->right_conn);
     }
@@ -696,6 +697,7 @@ test_max_connections (Fixture *f,
     dbus_connection_close (failing_conn);
 
   dbus_clear_connection (&failing_conn);
+  test_connection_shutdown (f->ctx, third_conn);
   dbus_connection_close (third_conn);
   dbus_clear_connection (&third_conn);
   dbus_error_free (&error);
@@ -1928,7 +1930,10 @@ teardown (Fixture *f,
   g_clear_error (&f->ge);
 
   if (f->left_conn != NULL)
-    dbus_connection_close (f->left_conn);
+    {
+      test_connection_shutdown (f->ctx, f->left_conn);
+      dbus_connection_close (f->left_conn);
+    }
 
   if (f->right_conn != NULL)
     {
@@ -1951,6 +1956,7 @@ teardown (Fixture *f,
 
       g_queue_clear (&f->held_messages);
 
+      test_connection_shutdown (f->ctx, f->right_conn);
       dbus_connection_close (f->right_conn);
     }
 

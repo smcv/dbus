@@ -964,6 +964,7 @@ teardown (Fixture *f,
       if (f->caller_filter_added)
         dbus_connection_remove_filter (f->caller, caller_filter, f);
 
+      test_connection_shutdown (f->ctx, f->caller);
       dbus_connection_close (f->caller);
       dbus_connection_unref (f->caller);
       f->caller = NULL;
@@ -974,6 +975,7 @@ teardown (Fixture *f,
       if (f->systemd_filter_added)
         dbus_connection_remove_filter (f->systemd, systemd_filter, f);
 
+      test_connection_shutdown (f->ctx, f->systemd);
       dbus_connection_close (f->systemd);
       dbus_connection_unref (f->systemd);
       f->systemd = NULL;
@@ -984,6 +986,7 @@ teardown (Fixture *f,
       if (f->activated_filter_added)
         dbus_connection_remove_filter (f->activated, activated_filter, f);
 
+      test_connection_shutdown (f->ctx, f->activated);
       dbus_connection_close (f->activated);
       dbus_connection_unref (f->activated);
       f->activated = NULL;
