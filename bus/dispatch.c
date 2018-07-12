@@ -593,7 +593,6 @@ bus_dispatch_remove_connection (DBusConnection *connection)
  */
 #define SEND_PENDING(connection) (dbus_connection_has_messages_to_send (connection))
 
-typedef dbus_bool_t (* Check1Func) (BusContext     *context);
 typedef dbus_bool_t (* Check2Func) (BusContext     *context,
                                     DBusConnection *connection);
 
@@ -1832,7 +1831,8 @@ check_get_all_match_rules (BusContext     *context,
  * but the correct thing may include OOM errors.
  */
 static dbus_bool_t
-check_hello_connection (BusContext *context)
+check_hello_connection (BusContext     *context,
+                        DBusConnection *nil _DBUS_GNUC_UNUSED)
 {
   DBusConnection *connection;
   DBusError error;
@@ -4374,52 +4374,6 @@ check_shell_service_success_auto_start (BusContext     *context,
   return retval;
 }
 
-typedef struct
-{
-  Check1Func func;
-  BusContext *context;
-} Check1Data;
-
-static dbus_bool_t
-check_oom_check1_func (void        *data,
-                       dbus_bool_t  have_memory)
-{
-  dbus_bool_t ret = TRUE;
-  Check1Data *d = data;
-
-  if (!have_memory)
-    bus_context_quiet_log_begin (d->context);
-
-  if (! (* d->func) (d->context))
-    ret = FALSE;
-
-  if (!have_memory)
-    bus_context_quiet_log_end (d->context);
-
-  if (ret && !check_no_leftovers (d->context))
-    {
-      _dbus_warn ("Messages were left over, should be covered by test suite");
-      ret = FALSE;
-    }
-
-  return ret;
-}
-
-static void
-check1_try_iterations (BusContext *context,
-                       const char *description,
-                       Check1Func  func)
-{
-  Check1Data d;
-
-  d.func = func;
-  d.context = context;
-
-  if (!_dbus_test_oom_handling (description, check_oom_check1_func,
-                                &d))
-    _dbus_test_fatal ("test failed");
-}
-
 static dbus_bool_t
 check_get_services (BusContext     *context,
 		    DBusConnection *connection,
@@ -4948,7 +4902,7 @@ bus_dispatch_test_conf (const DBusString *test_data_dir,
 
   _dbus_test_ok ("%s:%s - connection setup", _DBUS_FUNCTION_NAME, filename);
 
-  check1_try_iterations (context, "create_and_hello",
+  check2_try_iterations (context, NULL, "create_and_hello",
                          check_hello_connection);
   _dbus_test_ok ("%s:%s - check_hello_connection", _DBUS_FUNCTION_NAME, filename);
 
@@ -5143,7 +5097,7 @@ bus_dispatch_sha1_test (const DBusString *test_data_dir)
   if (!check_no_leftovers (context))
     _dbus_test_fatal ("Messages were left over after setting up initial SHA-1 connection");
 
-  check1_try_iterations (context, "create_and_hello_sha1",
+  check2_try_iterations (context, NULL, "create_and_hello_sha1",
                          check_hello_connection);
 
   kill_client_connection_unchecked (foo);
