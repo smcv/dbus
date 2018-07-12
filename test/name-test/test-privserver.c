@@ -1,4 +1,5 @@
 #include <config.h>
+#include <dbus/dbus-valgrind-internal.h>
 #include "../test-utils.h"
 
 static void die (const char *message,
@@ -80,6 +81,12 @@ main (int argc, char *argv[])
   DBusLoop *loop;
   DBusConnection *session;
   TestServiceData *testdata;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   dbus_error_init (&error);
 

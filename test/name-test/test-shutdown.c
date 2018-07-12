@@ -1,5 +1,6 @@
 
 #include <config.h>
+#include <dbus/dbus-valgrind-internal.h>
 #include "../test-utils.h"
 
 static DBusLoop *loop;
@@ -53,6 +54,12 @@ main (int    argc,
       char **argv)
 {
   int test_num = 0;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   open_destroy_shared_session_bus_connection ();
 

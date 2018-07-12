@@ -33,6 +33,7 @@
 #include <config.h>
 #include <dbus/dbus.h>
 #include <dbus/dbus-sysdeps.h>
+#include <dbus/dbus-valgrind-internal.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -110,6 +111,12 @@ main (int argc, char *argv[])
   DBusMessage *method;
   DBusConnection *conn;
   DBusError error;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   /* Time each iteration and make sure it doesn't take more than 5 seconds
      to complete.  Outside influences may cause connections to take longer

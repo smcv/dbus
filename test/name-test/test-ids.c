@@ -4,6 +4,7 @@
 #include <string.h>
 #include <dbus/dbus.h>
 #include <dbus/dbus-connection-internal.h>
+#include <dbus/dbus-valgrind-internal.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -28,6 +29,12 @@ main (int    argc,
   DBusConnection *connection;
   char *id;
   char *server_id;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   dbus_error_init (&error);
   connection = dbus_bus_get (DBUS_BUS_SESSION, &error);

@@ -10,6 +10,7 @@
 
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-connection-internal.h>
+#include <dbus/dbus-valgrind-internal.h>
 
 static void
 _run_iteration (DBusConnection *conn)
@@ -122,6 +123,12 @@ main (int argc, char *argv[])
   DBusMutex *mutex2, *dispatch_mutex2, *io_path_mutex2;
   DBusCondVar *dispatch_cond2, *io_path_cond2;
   int test_num = 0;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   printf ("# Testing late thread init\n");
 

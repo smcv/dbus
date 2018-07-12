@@ -1,6 +1,7 @@
 AM_CPPFLAGS = \
 	-I$(top_srcdir) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
+	$(VALGRIND_CFLAGS) \
 	-DDBUS_COMPILATION \
 	$(NULL)
 

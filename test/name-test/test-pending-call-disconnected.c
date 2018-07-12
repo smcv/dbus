@@ -30,6 +30,7 @@
 #include <config.h>
 #include <dbus/dbus.h>
 #include <dbus/dbus-sysdeps.h>
+#include <dbus/dbus-valgrind-internal.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -54,6 +55,12 @@ main (int argc, char *argv[])
   DBusMessage *method;
   DBusPendingCall *pending;
   DBusMessage *reply;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   printf ("# Testing pending call error\n");
 
