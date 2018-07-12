@@ -1079,6 +1079,7 @@ test_stop_server (Fixture *f,
   g_free (error_name);
   g_assert_null (tuple);
   g_clear_error (&f->error);
+  g_clear_object (&socket_address);
 
 #else /* !HAVE_CONTAINERS_TEST */
   g_test_skip ("Containers or gio-unix-2.0 not supported");
@@ -1547,6 +1548,9 @@ test_max_connections_per_container (Fixture *f,
       g_free (dbus_addresses[i]);
       g_clear_object (&socket_addresses[i]);
     }
+
+  for (i = 0; i < G_N_ELEMENTS (placeholders); i++)
+    g_clear_object (&placeholders[i]);
 
 #undef LIMIT
 #else /* !HAVE_CONTAINERS_TEST */
