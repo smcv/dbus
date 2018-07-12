@@ -102,7 +102,7 @@ main (int argc, char **argv)
   if (argc > 2)
     only = argv[2];
   else
-    only = NULL;
+    only = _dbus_getenv ("DBUS_TEST_ONLY");
 
   if (dir == NULL)
     _dbus_test_fatal ("Must specify test data directory as argv[1] or in DBUS_TEST_DATA env variable");

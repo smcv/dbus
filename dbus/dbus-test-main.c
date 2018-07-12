@@ -61,7 +61,7 @@ main (int    argc,
   if (argc > 2)
     specific_test = argv[2];
   else
-    specific_test = NULL;
+    specific_test = _dbus_getenv ("DBUS_TEST_ONLY");
 
   _dbus_run_tests (test_data_dir, specific_test);
   return _dbus_test_done_testing ();
