@@ -132,7 +132,7 @@ main (int argc, char *argv[])
   if (get_uuid || ensure_uuid)
     {
       char *uuid;
-      if (dbus_internal_do_not_use_get_uuid (filename, &uuid, ensure_uuid, &error))
+      if (_dbus_get_uuid (filename, &uuid, ensure_uuid, &error))
         {
           if (get_uuid) /* print nothing on --ensure */
             printf ("%s\n", uuid);

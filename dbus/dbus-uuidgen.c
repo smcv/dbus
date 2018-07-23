@@ -80,10 +80,10 @@ return_uuid (DBusGUID   *uuid,
  * @returns #FALSE if error is set
  */
 dbus_bool_t
-dbus_internal_do_not_use_get_uuid (const char *filename,
-                                   char      **uuid_p,
-                                   dbus_bool_t create_if_not_found,
-                                   DBusError  *error)
+_dbus_get_uuid (const char   *filename,
+                char        **uuid_p,
+                dbus_bool_t   create_if_not_found,
+                DBusError    *error)
 {
   DBusGUID uuid;
   
