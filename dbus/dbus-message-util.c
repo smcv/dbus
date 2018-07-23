@@ -449,11 +449,13 @@ dbus_internal_do_not_use_load_message_file (const DBusString    *filename,
  *
  * @param filename filename to load
  * @param expected_validity what the message has to be like to return #TRUE
+ * @param unused ignored
  * @returns #TRUE if the message has the expected validity
  */
-dbus_bool_t
+static dbus_bool_t
 dbus_internal_do_not_use_try_message_file (const DBusString    *filename,
-                                           DBusValidity         expected_validity)
+                                           DBusValidity         expected_validity,
+                                           void                *unused)
 {
   DBusString data;
   dbus_bool_t retval;
@@ -1801,9 +1803,8 @@ _dbus_message_test (const char *test_data_dir)
   initial_fds = _dbus_check_fdleaks_enter ();
 
   if (!dbus_internal_do_not_use_foreach_message_file (test_data_dir,
-                                                        (DBusForeachMessageFileFunc)
-                                                        dbus_internal_do_not_use_try_message_file,
-                                                        NULL))
+                                                      dbus_internal_do_not_use_try_message_file,
+                                                      NULL))
     _dbus_test_fatal ("foreach_message_file test failed");
 
   _dbus_check_fdleaks_leave (initial_fds);
