@@ -99,20 +99,6 @@ dbus_bool_t _dbus_credentials_test       (const char *test_data_dir);
 void        _dbus_run_tests                            (const char          *test_data_dir,
                                                         const char          *specific_test);
 
-dbus_bool_t dbus_internal_do_not_use_try_message_data  (const DBusString    *data,
-                                                        DBusValidity         expected_validity);
-dbus_bool_t dbus_internal_do_not_use_load_message_file (const DBusString    *filename,
-                                                        DBusString          *data);
-
-
-/* returns FALSE on fatal failure */
-typedef dbus_bool_t (* DBusForeachMessageFileFunc) (const DBusString   *filename,
-                                                    DBusValidity        expected_validity,
-                                                    void               *data);
-
-dbus_bool_t dbus_internal_do_not_use_foreach_message_file (const char                 *test_data_dir,
-                                                           DBusForeachMessageFileFunc  func,
-                                                           void                       *user_data);
 dbus_bool_t dbus_internal_do_not_use_generate_bodies    (int           sequence,
                                                          int           byte_order,
                                                          DBusString   *signature,

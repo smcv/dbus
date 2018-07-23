@@ -103,6 +103,14 @@ dbus_message_iter_get_args (DBusMessageIter *iter,
 #include <stdio.h>
 #include <stdlib.h>
 
+/* returns FALSE on fatal failure */
+typedef dbus_bool_t (* DBusForeachMessageFileFunc) (const DBusString   *filename,
+                                                    DBusValidity        expected_validity,
+                                                    void               *data);
+
+static dbus_bool_t try_message_data (const DBusString    *data,
+                                     DBusValidity         expected_validity);
+
 static int validities_seen[DBUS_VALIDITY_LAST + _DBUS_NEGATIVE_VALIDITY_COUNT];
 
 static void
@@ -417,9 +425,9 @@ check_loader_results (DBusMessageLoader      *loader,
  * @param data string to load message into
  * @returns #TRUE if the message was loaded
  */
-dbus_bool_t
-dbus_internal_do_not_use_load_message_file (const DBusString    *filename,
-                                            DBusString          *data)
+static dbus_bool_t
+load_message_file (const DBusString    *filename,
+                   DBusString          *data)
 {
   dbus_bool_t retval;
   DBusError error = DBUS_ERROR_INIT;
@@ -453,9 +461,9 @@ dbus_internal_do_not_use_load_message_file (const DBusString    *filename,
  * @returns #TRUE if the message has the expected validity
  */
 static dbus_bool_t
-dbus_internal_do_not_use_try_message_file (const DBusString    *filename,
-                                           DBusValidity         expected_validity,
-                                           void                *unused)
+try_message_file (const DBusString    *filename,
+                  DBusValidity         expected_validity,
+                  void                *unused)
 {
   DBusString data;
   dbus_bool_t retval;
@@ -465,10 +473,10 @@ dbus_internal_do_not_use_try_message_file (const DBusString    *filename,
   if (!_dbus_string_init (&data))
     _dbus_test_fatal ("could not allocate string");
 
-  if (!dbus_internal_do_not_use_load_message_file (filename, &data))
+  if (!load_message_file (filename, &data))
     goto failed;
 
-  retval = dbus_internal_do_not_use_try_message_data (&data, expected_validity);
+  retval = try_message_data (&data, expected_validity);
 
  failed:
 
@@ -495,9 +503,9 @@ dbus_internal_do_not_use_try_message_file (const DBusString    *filename,
  * @param expected_validity what the message has to be like to return #TRUE
  * @returns #TRUE if the message has the expected validity
  */
-dbus_bool_t
-dbus_internal_do_not_use_try_message_data (const DBusString    *data,
-                                           DBusValidity         expected_validity)
+static dbus_bool_t
+try_message_data (const DBusString    *data,
+                  DBusValidity         expected_validity)
 {
   DBusMessageLoader *loader;
   dbus_bool_t retval;
@@ -710,10 +718,10 @@ process_test_subdir (const DBusString          *test_base_dir,
  * @param user_data data for function
  * @returns #FALSE if there's a failure
  */
-dbus_bool_t
-dbus_internal_do_not_use_foreach_message_file (const char                *test_data_dir,
-                                               DBusForeachMessageFileFunc func,
-                                               void                      *user_data)
+static dbus_bool_t
+foreach_message_file (const char                *test_data_dir,
+                      DBusForeachMessageFileFunc func,
+                      void                      *user_data)
 {
   DBusString test_directory;
   dbus_bool_t retval;
@@ -1775,8 +1783,7 @@ _dbus_message_test (const char *test_data_dir)
     while (_dbus_message_data_iter_get_and_next (&diter,
                                                  &mdata))
       {
-        if (!dbus_internal_do_not_use_try_message_data (&mdata.data,
-                                                        mdata.expected_validity))
+        if (!try_message_data (&mdata.data, mdata.expected_validity))
           {
             _dbus_test_fatal ("expected validity %d and did not get it",
                         mdata.expected_validity);
@@ -1802,9 +1809,7 @@ _dbus_message_test (const char *test_data_dir)
 
   initial_fds = _dbus_check_fdleaks_enter ();
 
-  if (!dbus_internal_do_not_use_foreach_message_file (test_data_dir,
-                                                      dbus_internal_do_not_use_try_message_file,
-                                                      NULL))
+  if (!foreach_message_file (test_data_dir, try_message_file, NULL))
     _dbus_test_fatal ("foreach_message_file test failed");
 
   _dbus_check_fdleaks_leave (initial_fds);
