@@ -719,10 +719,14 @@ out:
 
   if (f->right_conn != NULL)
     {
+      GList *link;
+
       if (added_hold_filter)
         dbus_connection_remove_filter (f->right_conn, hold_filter, f);
 
-      g_queue_foreach (&f->held_messages, (GFunc) dbus_message_unref, NULL);
+      for (link = f->held_messages.head; link != NULL; link = link->next)
+        dbus_message_unref (link->data);
+
       g_queue_clear (&f->held_messages);
 
       dbus_connection_close (f->right_conn);

@@ -1882,6 +1882,8 @@ static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
+  GList *link;
+
   dbus_error_free (&f->e);
   g_clear_error (&f->ge);
 
@@ -1936,10 +1938,14 @@ teardown (Fixture *f,
 
   test_main_context_unref (f->ctx);
 
-  g_queue_foreach (&f->monitored, (GFunc) dbus_message_unref, NULL);
+  for (link = f->monitored.head; link != NULL; link = link->next)
+    dbus_message_unref (link->data);
+
   g_queue_clear (&f->monitored);
 
-  g_queue_foreach (&f->received, (GFunc) dbus_message_unref, NULL);
+  for (link = f->received.head; link != NULL; link = link->next)
+    dbus_message_unref (link->data);
+
   g_queue_clear (&f->received);
 
   g_free (f->address);

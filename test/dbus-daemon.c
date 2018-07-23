@@ -1930,6 +1930,8 @@ teardown (Fixture *f,
 
   if (f->right_conn != NULL)
     {
+      GList *link;
+
       if (f->right_conn_echo)
         {
           dbus_connection_remove_filter (f->right_conn, echo_filter, f);
@@ -1942,7 +1944,9 @@ teardown (Fixture *f,
           f->right_conn_hold = FALSE;
         }
 
-      g_queue_foreach (&f->held_messages, (GFunc) dbus_message_unref, NULL);
+      for (link = f->held_messages.head; link != NULL; link = link->next)
+        dbus_message_unref (link->data);
+
       g_queue_clear (&f->held_messages);
 
       dbus_connection_close (f->right_conn);
