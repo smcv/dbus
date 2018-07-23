@@ -251,10 +251,9 @@ _dbus_watch_list_free (DBusWatchList *watch_list)
   /* free watch_data and removes watches as a side effect */
   _dbus_watch_list_set_functions (watch_list,
                                   NULL, NULL, NULL, NULL, NULL);
-  _dbus_list_foreach (&watch_list->watches,
-                      (DBusForeachFunction) _dbus_watch_unref,
-                      NULL);
-  _dbus_list_clear (&watch_list->watches);
+
+  _dbus_list_clear_full (&watch_list->watches,
+                         (DBusFreeFunction) _dbus_watch_unref);
 
   dbus_free (watch_list);
 }

@@ -2760,16 +2760,14 @@ _dbus_connection_last_unref (DBusConnection *connection)
 
   _dbus_hash_table_unref (connection->pending_replies);
   connection->pending_replies = NULL;
-  
+
   _dbus_list_foreach (&connection->outgoing_messages,
                       free_outgoing_message,
 		      connection);
   _dbus_list_clear (&connection->outgoing_messages);
-  
-  _dbus_list_foreach (&connection->incoming_messages,
-		      (DBusForeachFunction) dbus_message_unref,
-		      NULL);
-  _dbus_list_clear (&connection->incoming_messages);
+
+  _dbus_list_clear_full (&connection->incoming_messages,
+                         (DBusFreeFunction) dbus_message_unref);
 
   _dbus_counter_unref (connection->outgoing_counter);
 
@@ -4709,11 +4707,9 @@ dbus_connection_dispatch (DBusConnection *connection)
       link = next;
     }
 
-  _dbus_list_foreach (&filter_list_copy,
-		      (DBusForeachFunction)_dbus_message_filter_unref,
-		      NULL);
-  _dbus_list_clear (&filter_list_copy);
-  
+  _dbus_list_clear_full (&filter_list_copy,
+                         (DBusFreeFunction) _dbus_message_filter_unref);
+
   CONNECTION_LOCK (connection);
 
   if (result == DBUS_HANDLER_RESULT_NEED_MEMORY)

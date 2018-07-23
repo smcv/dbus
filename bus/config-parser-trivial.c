@@ -122,13 +122,7 @@ bus_config_parser_unref (BusConfigParser *parser)
   _dbus_string_free (&parser->user);
   _dbus_string_free (&parser->service_helper);
   _dbus_string_free (&parser->bus_type);
-
-  _dbus_list_foreach (&parser->service_dirs,
-                      (DBusForeachFunction) dbus_free,
-                      NULL);
-
-  _dbus_list_clear (&parser->service_dirs);
-
+  _dbus_list_clear_full (&parser->service_dirs, dbus_free);
   dbus_free (parser);
 }
 

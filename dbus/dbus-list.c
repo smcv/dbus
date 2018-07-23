@@ -558,6 +558,33 @@ _dbus_list_clear (DBusList **list)
 }
 
 /**
+ * Free every link and every element in the list.
+ *
+ * @param list address of the head of the list.
+ * @param function free-function to call for each element.
+ *
+ */
+void
+_dbus_list_clear_full (DBusList         **list,
+                       DBusFreeFunction   function)
+{
+  DBusList *link;
+
+  link = *list;
+  while (link != NULL)
+    {
+      DBusList *next = _dbus_list_get_next_link (list, link);
+
+      function (link->data);
+      free_link (link);
+
+      link = next;
+    }
+
+  *list = NULL;
+}
+
+/**
  * Gets the first link in the list.
  * This is a constant-time operation.
  *

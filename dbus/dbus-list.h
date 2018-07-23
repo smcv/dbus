@@ -73,6 +73,9 @@ DBusList*   _dbus_list_find_last          (DBusList **list,
 DBUS_PRIVATE_EXPORT
 void        _dbus_list_clear              (DBusList **list);
 DBUS_PRIVATE_EXPORT
+void        _dbus_list_clear_full         (DBusList         **list,
+                                           DBusFreeFunction   function);
+DBUS_PRIVATE_EXPORT
 DBusList*   _dbus_list_get_first_link     (DBusList **list);
 DBUS_PRIVATE_EXPORT
 DBusList*   _dbus_list_get_last_link      (DBusList **list);

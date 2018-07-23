@@ -218,10 +218,8 @@ _dbus_timeout_list_free (DBusTimeoutList *timeout_list)
   _dbus_timeout_list_set_functions (timeout_list,
 				    NULL, NULL, NULL, NULL, NULL);
 
-  _dbus_list_foreach (&timeout_list->timeouts,
-		      (DBusForeachFunction) _dbus_timeout_unref,
-		      NULL);
-  _dbus_list_clear (&timeout_list->timeouts);
+  _dbus_list_clear_full (&timeout_list->timeouts,
+                         (DBusFreeFunction) _dbus_timeout_unref);
 
   dbus_free (timeout_list);
 }

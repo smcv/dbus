@@ -914,9 +914,8 @@ bus_activation_reload (BusActivation     *activation,
       goto failed;
     }
 
-  _dbus_list_foreach (&activation->directories,
-                      (DBusForeachFunction) bus_service_directory_unref, NULL);
-  _dbus_list_clear (&activation->directories);
+  _dbus_list_clear_full (&activation->directories,
+                         (DBusFreeFunction) bus_service_directory_unref);
 
   link = _dbus_list_get_first_link (directories);
   while (link != NULL)
@@ -1063,9 +1062,8 @@ bus_activation_unref (BusActivation *activation)
   if (activation->pending_activations)
     _dbus_hash_table_unref (activation->pending_activations);
 
-  _dbus_list_foreach (&activation->directories,
-                      (DBusForeachFunction) bus_service_directory_unref, NULL);
-  _dbus_list_clear (&activation->directories);
+  _dbus_list_clear_full (&activation->directories,
+                         (DBusFreeFunction) bus_service_directory_unref);
 
   if (activation->environment)
     _dbus_hash_table_unref (activation->environment);

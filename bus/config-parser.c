@@ -585,31 +585,13 @@ bus_config_parser_unref (BusConfigParser *parser)
       dbus_free (parser->servicehelper);
       dbus_free (parser->bus_type);
       dbus_free (parser->pidfile);
-      
-      _dbus_list_foreach (&parser->listen_on,
-                          (DBusForeachFunction) dbus_free,
-                          NULL);
 
-      _dbus_list_clear (&parser->listen_on);
+      _dbus_list_clear_full (&parser->listen_on, dbus_free);
+      _dbus_list_clear_full (&parser->service_dirs,
+                             (DBusFreeFunction) bus_config_service_dir_free);
+      _dbus_list_clear_full (&parser->conf_dirs, dbus_free);
+      _dbus_list_clear_full (&parser->mechanisms, dbus_free);
 
-      _dbus_list_foreach (&parser->service_dirs,
-                          (DBusForeachFunction) bus_config_service_dir_free,
-                          NULL);
-
-      _dbus_list_clear (&parser->service_dirs);
-
-      _dbus_list_foreach (&parser->conf_dirs,
-                          (DBusForeachFunction) dbus_free,
-                          NULL);
-
-      _dbus_list_clear (&parser->conf_dirs);
-
-      _dbus_list_foreach (&parser->mechanisms,
-                          (DBusForeachFunction) dbus_free,
-                          NULL);
-
-      _dbus_list_clear (&parser->mechanisms);
-      
       _dbus_string_free (&parser->basedir);
 
       if (parser->policy)
@@ -929,9 +911,7 @@ start_busconfig_child (BusConfigParser   *parser,
                 BUS_SERVICE_DIR_FLAGS_STRICT_NAMING))
             {
               BUS_SET_OOM (error);
-              _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
-                  NULL);
-              _dbus_list_clear (&dirs);
+              _dbus_list_clear_full (&dirs, dbus_free);
               return FALSE;
             }
         }
@@ -958,9 +938,7 @@ start_busconfig_child (BusConfigParser   *parser,
                                             BUS_SERVICE_DIR_FLAGS_NONE))
         {
           BUS_SET_OOM (error);
-          _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
-              NULL);
-          _dbus_list_clear (&dirs);
+          _dbus_list_clear_full (&dirs, dbus_free);
           return FALSE;
         }
 
@@ -996,9 +974,7 @@ start_busconfig_child (BusConfigParser   *parser,
                                             BUS_SERVICE_DIR_FLAGS_NONE))
         {
           BUS_SET_OOM (error);
-          _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
-              NULL);
-          _dbus_list_clear (&dirs);
+          _dbus_list_clear_full (&dirs, dbus_free);
           return FALSE;
         }
 

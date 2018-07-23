@@ -523,12 +523,7 @@ tokenize_command_line (const char *command_line, DBusError *error)
   _dbus_string_free (&current_token);
 
  init_error:
-  if (retval)
-    {
-      _dbus_list_foreach (&retval, (DBusForeachFunction) dbus_free, NULL);
-      _dbus_list_clear (&retval);
-    }
-
+  _dbus_list_clear_full (&retval, dbus_free);
   return NULL;
 }
 
@@ -618,9 +613,8 @@ _dbus_shell_parse_argv (const char *command_line,
       ++i;
     }
   argv[argc] = NULL;
-  
-  _dbus_list_foreach (&tokens, (DBusForeachFunction) dbus_free, NULL);
-  _dbus_list_clear (&tokens);
+
+  _dbus_list_clear_full (&tokens, dbus_free);
   
   if (argcp)
     *argcp = argc;
@@ -633,8 +627,7 @@ _dbus_shell_parse_argv (const char *command_line,
   return TRUE;
 
  error:
-  _dbus_list_foreach (&tokens, (DBusForeachFunction) dbus_free, NULL);
-  _dbus_list_clear (&tokens);
+  _dbus_list_clear_full (&tokens, dbus_free);
 
   return FALSE;
 

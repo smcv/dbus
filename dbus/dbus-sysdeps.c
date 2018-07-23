@@ -341,8 +341,7 @@ _dbus_split_paths_and_append (DBusString *dirs,
   return TRUE;
 
  oom:
-  _dbus_list_foreach (dir_list, (DBusForeachFunction)dbus_free, NULL); 
-  _dbus_list_clear (dir_list);
+  _dbus_list_clear_full (dir_list, dbus_free);
   return FALSE;
 }
 
