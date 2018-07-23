@@ -913,6 +913,7 @@ _dbus_connect_unix_socket (const char     *path,
   int fd;
   size_t path_len;
   struct sockaddr_un addr;
+  _DBUS_STATIC_ASSERT (sizeof (addr.sun_path) > _DBUS_MAX_SUN_PATH_LENGTH);
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -945,7 +946,7 @@ _dbus_connect_unix_socket (const char     *path,
           return -1;
 	}
 
-      strncpy (&addr.sun_path[1], path, path_len);
+      strncpy (&addr.sun_path[1], path, sizeof (addr.sun_path) - 2);
       /* _dbus_verbose_bytes (addr.sun_path, sizeof (addr.sun_path)); */
 #else /* !__linux__ */
       dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
@@ -964,7 +965,7 @@ _dbus_connect_unix_socket (const char     *path,
           return -1;
 	}
 
-      strncpy (addr.sun_path, path, path_len);
+      strncpy (addr.sun_path, path, sizeof (addr.sun_path) - 1);
     }
 
   if (connect (fd, (struct sockaddr*) &addr, _DBUS_STRUCT_OFFSET (struct sockaddr_un, sun_path) + path_len) < 0)
@@ -1120,6 +1121,7 @@ _dbus_listen_unix_socket (const char     *path,
   int listen_fd;
   struct sockaddr_un addr;
   size_t path_len;
+  _DBUS_STATIC_ASSERT (sizeof (addr.sun_path) > _DBUS_MAX_SUN_PATH_LENGTH);
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -1154,7 +1156,7 @@ _dbus_listen_unix_socket (const char     *path,
           return -1;
 	}
 
-      strncpy (&addr.sun_path[1], path, path_len);
+      strncpy (&addr.sun_path[1], path, sizeof (addr.sun_path) - 2);
       /* _dbus_verbose_bytes (addr.sun_path, sizeof (addr.sun_path)); */
 #else /* !__linux__ */
       dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
@@ -1191,7 +1193,7 @@ _dbus_listen_unix_socket (const char     *path,
           return -1;
 	}
 
-      strncpy (addr.sun_path, path, path_len);
+      strncpy (addr.sun_path, path, sizeof (addr.sun_path) - 1);
     }
 
   if (bind (listen_fd, (struct sockaddr*) &addr, _DBUS_STRUCT_OFFSET (struct sockaddr_un, sun_path) + path_len) < 0)
