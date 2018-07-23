@@ -443,9 +443,8 @@ _dbus_marshal_validate_test (void)
       _dbus_test_fatal ("oom");
 
     sequence = 0;
-    while (dbus_internal_do_not_use_generate_bodies (sequence,
-                                                     DBUS_LITTLE_ENDIAN,
-                                                     &signature, &body))
+    while (_dbus_test_generate_bodies (sequence, DBUS_LITTLE_ENDIAN,
+                                       &signature, &body))
       {
         DBusValidity validity;
 
@@ -468,9 +467,8 @@ _dbus_marshal_validate_test (void)
       }
                                                      
     sequence = 0;
-    while (dbus_internal_do_not_use_generate_bodies (sequence,
-                                                     DBUS_BIG_ENDIAN,
-                                                     &signature, &body))
+    while (_dbus_test_generate_bodies (sequence, DBUS_BIG_ENDIAN,
+                                       &signature, &body))
       {
         DBusValidity validity;
 

@@ -96,13 +96,12 @@ dbus_bool_t _dbus_object_tree_test       (void);
 
 dbus_bool_t _dbus_credentials_test       (const char *test_data_dir);
 
-void        _dbus_run_tests                            (const char          *test_data_dir,
-                                                        const char          *specific_test);
+void        _dbus_run_tests              (const char *test_data_dir,
+                                          const char *specific_test);
 
-dbus_bool_t dbus_internal_do_not_use_generate_bodies    (int           sequence,
-                                                         int           byte_order,
-                                                         DBusString   *signature,
-                                                         DBusString   *body);
-
+dbus_bool_t _dbus_test_generate_bodies   (int         sequence,
+                                          int         byte_order,
+                                          DBusString *signature,
+                                          DBusString *body);
 
 #endif /* DBUS_TEST_H */

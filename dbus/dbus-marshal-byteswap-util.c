@@ -43,9 +43,7 @@ do_byteswap_test (int byte_order)
   opposite_order = byte_order == DBUS_LITTLE_ENDIAN ? DBUS_BIG_ENDIAN : DBUS_LITTLE_ENDIAN;
   
   sequence = 0;
-  while (dbus_internal_do_not_use_generate_bodies (sequence,
-                                                   byte_order,
-                                                   &signature, &body))
+  while (_dbus_test_generate_bodies (sequence, byte_order, &signature, &body))
     {
       DBusString copy;
       DBusTypeReader body_reader;

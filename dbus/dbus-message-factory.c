@@ -188,9 +188,8 @@ generate_many_bodies_inner (DBusMessageDataIter *iter,
   if (!_dbus_string_init (&signature) || !_dbus_string_init (&body))
     _dbus_test_fatal ("oom");
 
-  if (dbus_internal_do_not_use_generate_bodies (iter_get_sequence (iter),
-                                                byte_order,
-                                                &signature, &body))
+  if (_dbus_test_generate_bodies (iter_get_sequence (iter), byte_order,
+                                  &signature, &body))
     {
       const char *v_SIGNATURE;
 

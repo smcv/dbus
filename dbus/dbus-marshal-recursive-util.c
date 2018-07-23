@@ -1637,10 +1637,10 @@ build_body (TestTypeNode **nodes,
 }
 
 dbus_bool_t
-dbus_internal_do_not_use_generate_bodies (int           sequence,
-                                          int           byte_order,
-                                          DBusString   *signature,
-                                          DBusString   *body)
+_dbus_test_generate_bodies (int           sequence,
+                            int           byte_order,
+                            DBusString   *signature,
+                            DBusString   *body)
 {
   TestTypeNode *nodes[1];
   int i;
