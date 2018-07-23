@@ -4675,10 +4675,11 @@ dbus_connection_dispatch (DBusConnection *connection)
       
       return DBUS_DISPATCH_NEED_MEMORY;
     }
-  
-  _dbus_list_foreach (&filter_list_copy,
-		      (DBusForeachFunction)_dbus_message_filter_ref,
-		      NULL);
+
+  for (link = _dbus_list_get_first_link (&filter_list_copy);
+       link != NULL;
+       link = _dbus_list_get_next_link (&filter_list_copy, link))
+    _dbus_message_filter_ref (link->data);
 
   /* We're still protected from dispatch() reentrancy here
    * since we acquired the dispatcher
