@@ -3,6 +3,12 @@ dbus 1.12.10 (UNRELEASED)
 
 Fixes:
 
+• Fix build with gcc 8 -Werror=cast-function-type
+  (fd.o #107349, Simon McVittie)
+
+• Fix warning from gcc 8 about suspicious use of strncpy() when
+  populating struct sockaddr_un (fd.o #107350, Simon McVittie)
+
 • Don't use misleading errno-derived error names if getaddrinfo() or
   getnameinfo() fails with a code other than EAI_SYSTEM
   (fd.o #106395, Simon McVittie)
