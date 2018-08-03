@@ -1123,6 +1123,22 @@ test_invalid_metadata_getters (Fixture *f,
   g_free (error_name);
   g_clear_error (&f->error);
 
+  g_test_message ("Inspecting dbus-daemon");
+  tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
+                                  g_variant_new ("(s)", DBUS_SERVICE_DBUS),
+                                  G_DBUS_CALL_FLAGS_NONE, -1, NULL, &f->error);
+  g_assert_nonnull (f->error);
+  g_assert_null (tuple);
+  error_name = g_dbus_error_get_remote_error (f->error);
+#ifdef DBUS_ENABLE_CONTAINERS
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_NOT_CONTAINER);
+#else
+  /* TODO: We can use g_assert_error for this when we depend on GLib 2.42 */
+  g_assert_cmpstr (error_name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
+#endif
+  g_free (error_name);
+  g_clear_error (&f->error);
+
   g_test_message ("Inspecting a non-connection");
   unique_name = g_dbus_connection_get_unique_name (f->unconfined_conn);
   tuple = g_dbus_proxy_call_sync (f->proxy, "GetConnectionInstance",
