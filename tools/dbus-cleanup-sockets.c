@@ -35,6 +35,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <dbus/dbus-macros.h>
+
 #ifndef TRUE
 #define TRUE (1)
 #endif
@@ -372,6 +374,7 @@ clean_dir (const char *dir)
 
 #endif /* AF_UNIX */
 
+static void usage (int ecode) _DBUS_GNUC_NORETURN;
 static void
 usage (int ecode)
 {
@@ -379,6 +382,7 @@ usage (int ecode)
   exit (ecode);
 }
 
+static void version (void) _DBUS_GNUC_NORETURN;
 static void
 version (void)
 {
