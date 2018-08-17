@@ -236,7 +236,7 @@ static DBusHashEntry* find_string_function      (DBusHashTable          *table,
                                                  DBusHashEntry        ***bucket,
                                                  DBusPreallocatedHash   *preallocated);
 static unsigned int   string_hash               (const char             *str);
-static void           rebuild_table             (DBusHashTable          *table);
+static dbus_bool_t    rebuild_table             (DBusHashTable          *table);
 static DBusHashEntry* alloc_entry               (DBusHashTable          *table);
 static void           remove_entry              (DBusHashTable          *table,
                                                  DBusHashEntry         **bucket,
@@ -802,7 +802,33 @@ add_allocated_entry (DBusHashTable   *table,
    */
   if (table->n_entries >= table->hi_rebuild_size ||
       table->n_entries < table->lo_rebuild_size)
-    rebuild_table (table);
+    {
+      if (!rebuild_table (table))
+        return;
+
+      if (bucket)
+        {
+          /* Recalculate hash for the new table size */
+          switch (table->key_type)
+            {
+            case DBUS_HASH_STRING:
+              idx = string_hash (entry->key) & table->mask;
+              break;
+
+            case DBUS_HASH_INT:
+            case DBUS_HASH_UINTPTR:
+              idx = RANDOM_INDEX (table, entry->key);
+              break;
+
+            default:
+              idx = 0;
+              _dbus_assert_not_reached ("Unknown hash table type");
+              break;
+            }
+
+          *bucket = &(table->buckets[idx]);
+        }
+    }
 }
 
 static DBusHashEntry*
@@ -927,7 +953,8 @@ find_direct_function (DBusHashTable        *table,
                                 preallocated);
 }
 
-static void
+/* Return FALSE if nothing happened. */
+static dbus_bool_t
 rebuild_table (DBusHashTable *table)
 {
   int old_size;
@@ -954,13 +981,13 @@ rebuild_table (DBusHashTable *table)
           table->down_shift >= 2)
         new_buckets = table->n_buckets * 4;
       else
-        return; /* can't grow anymore */
+        return FALSE;   /* can't grow any more */
     }
   else
     {
       new_buckets = table->n_buckets / 4;
       if (new_buckets < DBUS_SMALL_HASH_TABLE)
-        return; /* don't bother shrinking this far */
+        return FALSE;   /* don't bother shrinking this far */
     }
 
   table->buckets = dbus_new0 (DBusHashEntry*, new_buckets);
@@ -970,7 +997,7 @@ rebuild_table (DBusHashTable *table)
        * still work, albeit more slowly.
        */
       table->buckets = old_buckets;
-      return;
+      return FALSE;
     }
 
   table->n_buckets = new_buckets;
@@ -1045,6 +1072,8 @@ rebuild_table (DBusHashTable *table)
 
   if (old_buckets != table->static_buckets)
     dbus_free (old_buckets);
+
+  return TRUE;
 }
 
 /**
