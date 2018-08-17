@@ -30,6 +30,9 @@
 #include <dbus/dbus-string.h>
 #include "connection.h"
 
+typedef dbus_bool_t (* BusConnectionForeachFunction) (DBusConnection *connection,
+                                                      void           *data);
+
 dbus_bool_t bus_dispatch_test         (const DBusString             *test_data_dir);
 dbus_bool_t bus_dispatch_sha1_test    (const DBusString             *test_data_dir);
 dbus_bool_t bus_config_parser_test    (const DBusString             *test_data_dir);

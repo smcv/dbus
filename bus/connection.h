@@ -34,21 +34,11 @@ typedef enum
   BUS_EXTRA_HEADERS_NONE = 0
 } BusExtraHeaders;
 
-typedef dbus_bool_t (* BusConnectionForeachFunction) (DBusConnection *connection, 
-                                                      void           *data);
-
-
 BusConnections* bus_connections_new               (BusContext                   *context);
 BusConnections* bus_connections_ref               (BusConnections               *connections);
 void            bus_connections_unref             (BusConnections               *connections);
 dbus_bool_t     bus_connections_setup_connection  (BusConnections               *connections,
                                                    DBusConnection               *connection);
-void            bus_connections_foreach           (BusConnections               *connections,
-                                                   BusConnectionForeachFunction  function,
-                                                   void                         *data);
-void            bus_connections_foreach_active    (BusConnections               *connections,
-                                                   BusConnectionForeachFunction  function,
-                                                   void                         *data);
 BusContext*     bus_connections_get_context       (BusConnections               *connections);
 void            bus_connections_increment_stamp   (BusConnections               *connections);
 dbus_bool_t     bus_connections_reload_policy     (BusConnections               *connections,
