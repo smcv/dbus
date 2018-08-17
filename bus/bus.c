@@ -1315,12 +1315,6 @@ bus_context_allow_windows_user (BusContext       *context,
                                         windows_sid);
 }
 
-BusPolicy *
-bus_context_get_policy (BusContext *context)
-{
-  return context->policy;
-}
-
 BusContainers *
 bus_context_get_containers (BusContext *context)
 {
