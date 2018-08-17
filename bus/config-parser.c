@@ -3458,22 +3458,22 @@ limits_equal (const BusLimits *a,
 {
   return
     (a->max_incoming_bytes == b->max_incoming_bytes
-     || a->max_incoming_unix_fds == b->max_incoming_unix_fds
-     || a->max_outgoing_bytes == b->max_outgoing_bytes
-     || a->max_outgoing_unix_fds == b->max_outgoing_unix_fds
-     || a->max_message_size == b->max_message_size
-     || a->max_message_unix_fds == b->max_message_unix_fds
-     || a->activation_timeout == b->activation_timeout
-     || a->auth_timeout == b->auth_timeout
-     || a->pending_fd_timeout == b->pending_fd_timeout
-     || a->max_completed_connections == b->max_completed_connections
-     || a->max_incomplete_connections == b->max_incomplete_connections
-     || a->max_connections_per_user == b->max_connections_per_user
-     || a->max_pending_activations == b->max_pending_activations
-     || a->max_services_per_connection == b->max_services_per_connection
-     || a->max_match_rules_per_connection == b->max_match_rules_per_connection
-     || a->max_replies_per_connection == b->max_replies_per_connection
-     || a->reply_timeout == b->reply_timeout);
+     && a->max_incoming_unix_fds == b->max_incoming_unix_fds
+     && a->max_outgoing_bytes == b->max_outgoing_bytes
+     && a->max_outgoing_unix_fds == b->max_outgoing_unix_fds
+     && a->max_message_size == b->max_message_size
+     && a->max_message_unix_fds == b->max_message_unix_fds
+     && a->activation_timeout == b->activation_timeout
+     && a->auth_timeout == b->auth_timeout
+     && a->pending_fd_timeout == b->pending_fd_timeout
+     && a->max_completed_connections == b->max_completed_connections
+     && a->max_incomplete_connections == b->max_incomplete_connections
+     && a->max_connections_per_user == b->max_connections_per_user
+     && a->max_pending_activations == b->max_pending_activations
+     && a->max_services_per_connection == b->max_services_per_connection
+     && a->max_match_rules_per_connection == b->max_match_rules_per_connection
+     && a->max_replies_per_connection == b->max_replies_per_connection
+     && a->reply_timeout == b->reply_timeout);
 }
 
 static dbus_bool_t
