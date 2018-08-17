@@ -745,8 +745,8 @@ _dbus_hash_iter_lookup (DBusHashTable *table,
                         DBusHashIter  *iter)
 {
   DBusRealHashIter *real;
-  DBusHashEntry *entry;
-  DBusHashEntry **bucket;
+  DBusHashEntry *entry = NULL;
+  DBusHashEntry **bucket = NULL;
   
   _DBUS_STATIC_ASSERT (sizeof (DBusHashIter) == sizeof (DBusRealHashIter));
   
@@ -754,8 +754,14 @@ _dbus_hash_iter_lookup (DBusHashTable *table,
 
   entry = (* table->find_function) (table, key, create_if_not_found, &bucket, NULL);
 
+  /* entry == NULL means not found, and either !create_if_not_found or OOM */
   if (entry == NULL)
     return FALSE;
+
+  _dbus_assert (bucket != NULL);
+  _dbus_assert (table->n_buckets >= 1);
+  _dbus_assert (bucket >= table->buckets);
+  _dbus_assert (bucket <= &table->buckets[table->n_buckets - 1]);
 
   if (create_if_not_found)
     {
@@ -772,6 +778,8 @@ _dbus_hash_iter_lookup (DBusHashTable *table,
   real->next_bucket = (bucket - table->buckets) + 1;
   real->n_entries_on_init = table->n_entries; 
 
+  _dbus_assert (real->next_bucket >= 0);
+  _dbus_assert (real->next_bucket <= table->n_buckets);
   _dbus_assert (&(table->buckets[real->next_bucket-1]) == real->bucket);
   
   return TRUE;
@@ -856,6 +864,7 @@ add_entry (DBusHashTable        *table,
     }
 
   add_allocated_entry (table, entry, idx, key, bucket);
+  _dbus_assert (bucket == NULL || *bucket != NULL);
 
   return entry;
 }
@@ -913,10 +922,19 @@ find_generic_function (DBusHashTable        *table,
     }
 
   if (create_if_not_found)
-    entry = add_entry (table, idx, key, bucket, preallocated);
+    {
+      entry = add_entry (table, idx, key, bucket, preallocated);
+
+      if (entry == NULL)  /* OOM */
+        return NULL;
+
+      _dbus_assert (bucket == NULL || *bucket != NULL);
+    }
   else if (preallocated)
-    _dbus_hash_table_free_preallocated_entry (table, preallocated);
-  
+    {
+      _dbus_hash_table_free_preallocated_entry (table, preallocated);
+    }
+
   return entry;
 }
 
