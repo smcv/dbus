@@ -39,7 +39,6 @@ BusConnections* bus_connections_ref               (BusConnections               
 void            bus_connections_unref             (BusConnections               *connections);
 dbus_bool_t     bus_connections_setup_connection  (BusConnections               *connections,
                                                    DBusConnection               *connection);
-BusContext*     bus_connections_get_context       (BusConnections               *connections);
 void            bus_connections_increment_stamp   (BusConnections               *connections);
 dbus_bool_t     bus_connections_reload_policy     (BusConnections               *connections,
                                                    DBusError                    *error);

@@ -1148,12 +1148,6 @@ bus_connection_get_policy (DBusConnection *connection)
   return d->policy;
 }
 
-BusContext*
-bus_connections_get_context (BusConnections *connections)
-{
-  return connections->context;
-}
-
 /*
  * This is used to avoid covering the same connection twice when
  * traversing connections. Note that it assumes we will
