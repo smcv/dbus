@@ -500,15 +500,36 @@ static_data = \
 	data/equiv-config-files/entities/basic.d/basic.conf \
 	data/equiv-config-files/entities/entities-1.conf \
 	data/equiv-config-files/entities/entities-2.conf \
+	data/invalid-config-files/apparmor-bad-attribute.conf \
+	data/invalid-config-files/apparmor-bad-mode.conf \
+	data/invalid-config-files/bad-attribute.conf \
+	data/invalid-config-files/bad-attribute-2.conf \
+	data/invalid-config-files/bad-element.conf \
+	data/invalid-config-files/bad-limit.conf \
 	data/invalid-config-files/badselinux-1.conf \
 	data/invalid-config-files/badselinux-2.conf \
 	data/invalid-config-files/circular-1.conf \
 	data/invalid-config-files/circular-2.conf \
 	data/invalid-config-files/circular-3.conf \
+	data/invalid-config-files/double-attribute.conf \
 	data/invalid-config-files/impossible-send.conf \
+	data/invalid-config-files/limit-no-name.conf \
+	data/invalid-config-files/ludicrous-limit.conf \
+	data/invalid-config-files/negative-limit.conf \
+	data/invalid-config-files/non-numeric-limit.conf \
 	data/invalid-config-files/not-well-formed.conf \
+	data/invalid-config-files/policy-bad-at-console.conf \
+	data/invalid-config-files/policy-bad-attribute.conf \
+	data/invalid-config-files/policy-bad-context.conf \
+	data/invalid-config-files/policy-bad-rule-attribute.conf \
+	data/invalid-config-files/policy-contradiction.conf \
+	data/invalid-config-files/policy-member-no-path.conf \
+	data/invalid-config-files/policy-mixed.conf \
+	data/invalid-config-files/policy-no-attributes.conf \
+	data/invalid-config-files/policy-no-rule-attribute.conf \
 	data/invalid-config-files/truncated-file.conf \
 	data/invalid-config-files/send-and-receive.conf \
+	data/invalid-config-files/unknown-limit.conf \
 	data/invalid-messages/boolean-has-no-value.message-raw \
 	data/sha-1/Readme.txt \
 	data/sha-1/bit-hashes.sha1 \
@@ -527,6 +548,7 @@ static_data = \
 	data/valid-config-files/entities.conf \
 	data/valid-config-files/listen-unix-runtime.conf \
 	data/valid-config-files/many-rules.conf \
+	data/valid-config-files/minimal.conf \
 	data/valid-config-files/standard-session-dirs.conf \
 	data/valid-config-files-system/many-rules.conf \
 	data/valid-config-files-system/system.d/test.conf \
