@@ -576,6 +576,8 @@ static void
 set_timeout (guint factor)
 {
   static guint timeout = 0;
+  const gchar *env_factor_str;
+  guint64 env_factor = 1;
 
   /* Prevent tests from hanging forever. This is intended to be long enough
    * that any reasonable regression test on any reasonable hardware would
@@ -587,6 +589,18 @@ set_timeout (guint factor)
 
   if (RUNNING_ON_VALGRIND)
     factor = factor * 10;
+
+  env_factor_str = g_getenv ("DBUS_TEST_TIMEOUT_MULTIPLIER");
+
+  if (env_factor_str != NULL)
+    {
+      env_factor = g_ascii_strtoull (env_factor_str, NULL, 10);
+
+      if (env_factor == 0)
+        g_error ("Invalid DBUS_TEST_TIMEOUT_MULTIPLIER %s", env_factor_str);
+
+      factor = factor * env_factor;
+    }
 
   timeout = g_timeout_add_seconds (TIMEOUT * factor, time_out, NULL);
 #ifdef G_OS_UNIX
