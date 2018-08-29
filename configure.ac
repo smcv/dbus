@@ -1224,6 +1224,9 @@ CFLAGS="$EXTRA_CFLAGS $CFLAGS"
 CXXFLAGS="$EXTRA_CXXFLAGS $CXXFLAGS"
 LDFLAGS="$EXTRA_LDFLAGS $LDFLAGS"
 
+AC_ARG_VAR([SANITIZE_CFLAGS],
+           [Extra CFLAGS for modules that are instrumented for error-checking])
+
 case $host_os in
     solaris*)
         # Solaris' C library apparently needs these runes to be threadsafe...

@@ -8,6 +8,7 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 # if assertions are enabled, improve backtraces
