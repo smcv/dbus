@@ -1581,17 +1581,23 @@ AS_CASE(["${exec_prefix}"],
   ['NONE'|'${prefix}'],
     [:],
   [*],
-    [can_relocate=no])
+    [
+      can_relocate=no
+      # If the user said --enable-relocation but we can't do it, error out
+      AS_IF([test "x$enable_relocation" = xyes],
+        [AC_MSG_ERROR([Relocatable pkg-config metadata requires --exec-prefix='\${prefix}', not ${exec_prefix}])])
+    ])
 
 AS_CASE(["${libdir}"],
   ['${prefix}/lib'|'${prefix}/lib64'|'${exec_prefix}/lib'|'${exec_prefix}/lib64'],
     [:],
   [*],
-    [can_relocate=no])
-
-# If the user said --enable-relocation but we can't do it, error out
-AS_IF([test "x$can_relocate" = xno && test "x$enable_relocation" = xyes],
-  [AC_MSG_ERROR([Relocatable pkg-config metadata requires --exec-prefix='\${prefix}' and the default libdir])])
+    [
+      can_relocate=no
+      # If the user said --enable-relocation but we can't do it, error out
+      AS_IF([test "x$enable_relocation" = xyes],
+        [AC_MSG_ERROR([Relocatable pkg-config metadata requires default libdir, not ${libdir}])])
+    ])
 
 # By default, on Windows we are relocatable if possible
 AS_IF([test "x$enable_relocation" = xauto && test "x$dbus_win" = xyes],
