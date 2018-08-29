@@ -1578,7 +1578,7 @@ AC_ARG_ENABLE([relocation],
 can_relocate=yes
 
 AS_CASE(["${exec_prefix}"],
-  ['NONE'|'${prefix}'],
+  ['NONE'|'${prefix}'|"${prefix}"],
     [:],
   [*],
     [
@@ -1589,7 +1589,7 @@ AS_CASE(["${exec_prefix}"],
     ])
 
 AS_CASE(["${libdir}"],
-  ['${prefix}/lib'|'${prefix}/lib64'|'${exec_prefix}/lib'|'${exec_prefix}/lib64'],
+  ['${prefix}/lib'|'${prefix}/lib64'|'${exec_prefix}/lib'|'${exec_prefix}/lib64'|"${prefix}/lib"|"${exec_prefix}/lib"|"${prefix}/lib64"|"${exec_prefix}/lib64"],
     [:],
   [*],
     [
