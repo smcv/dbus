@@ -82,12 +82,24 @@ case "$ci_distro" in
         # travis-ci has a sources list for Chrome which doesn't support i386
         : | $sudo tee /etc/apt/sources.list.d/google-chrome.list
 
+        case "$ci_suite" in
+            (trusty)
+                # Ubuntu 14.04 didn't have the wine32, wine64 packages
+                wine32=wine:i386
+                wine64=wine:amd64
+                ;;
+            (*)
+                wine32=wine32
+                wine64=wine64
+                ;;
+        esac
+
         case "$ci_host" in
             (i686-w64-mingw32)
                 $sudo dpkg --add-architecture i386
                 ;;
             (x86_64-w64-mingw32)
-                # nothing required, travis-ci is an amd64 system
+                # assume the host or container is x86_64 already
                 ;;
         esac
 
@@ -98,14 +110,14 @@ case "$ci_distro" in
                 $sudo apt-get -qq -y install \
                     binutils-mingw-w64-i686 \
                     g++-mingw-w64-i686 \
-                    wine:i386 \
+                    $wine32 \
                     ${NULL}
                 ;;
             (x86_64-w64-mingw32)
                 $sudo apt-get -qq -y install \
                     binutils-mingw-w64-x86-64\
                     g++-mingw-w64-x86-64 \
-                    wine:amd64 \
+                    $wine64 \
                     ${NULL}
                 ;;
         esac
