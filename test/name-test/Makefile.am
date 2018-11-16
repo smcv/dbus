@@ -37,7 +37,6 @@ AM_TESTS_ENVIRONMENT = \
         export DBUS_TOP_BUILDDIR=@abs_top_builddir@; \
         export DBUS_TOP_SRCDIR=@abs_top_srcdir@; \
         export PATH="@abs_top_builddir@/bus:$$PATH"; \
-        export PYTHON=@PYTHON@; \
         export DBUS_TEST_DATA=@abs_top_builddir@/test/data; \
         export DBUS_TEST_DAEMON=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT); \
         export DBUS_TEST_DBUS_LAUNCH=@abs_top_builddir@/tools/dbus-launch$(EXEEXT); \
@@ -60,7 +59,7 @@ TESTS += \
 endif
 endif
 
-EXTRA_DIST=run-test.sh run-test-systemserver.sh test-wait-for-echo.py test-activation-forking.py
+EXTRA_DIST=run-test.sh run-test-systemserver.sh
 
 if DBUS_ENABLE_EMBEDDED_TESTS
 

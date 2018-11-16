@@ -64,7 +64,6 @@ TEST_BINARIES = \
 	test-exit \
 	test-names \
 	test-segfault \
-	test-service \
 	test-shell-service \
 	$(NULL)
 
@@ -145,6 +144,7 @@ nobase_testexec_PROGRAMS =
 nobase_testmeta_DATA =
 
 installable_helpers = \
+	test-service \
 	test-sleep-forever \
 	$(NULL)
 installable_tests = \

@@ -68,22 +68,8 @@ dbus_send_test () {
   rm -f output.tmp
 }
 
-py_test () {
-  t="$1"
-  shift
-  if test "x$PYTHON" = "x:"; then
-    interpret_result 77 "$t" "(Python interpreter not found)"
-  else
-    e=0
-    echo "# running test $t"
-    $PYTHON "$DBUS_TOP_SRCDIR/test/name-test/$t" "$@" >&2 || e=$?
-    interpret_result "$e" "$t" "$@"
-  fi
-}
-
 test_num=1
-# TAP syntax: we plan to run 2 tests
-echo "1..2"
+# TAP syntax: we plan to run 1 test
+echo "1..1"
 
 dbus_send_test test-expected-echo-fail 1 DBus.Error --print-reply --dest=org.freedesktop.DBus.TestSuiteEchoService /org/freedesktop/TestSuite org.freedesktop.TestSuite.Echo string:hi
-py_test test-wait-for-echo.py

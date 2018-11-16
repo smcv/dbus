@@ -25,9 +25,7 @@ dist: xenial
 language: c
 script:
   - ./tools/ci-install.sh
-  # python-dbus and python-gi aren't available to Travis's version of
-  # Python in /opt, which it uses as a default
-  - PYTHON=/usr/bin/python ci_parallel=2 ci_sudo=yes ./tools/ci-build.sh
+  - ci_parallel=2 ci_sudo=yes ./tools/ci-build.sh
 
 env:
   - ci_variant=production

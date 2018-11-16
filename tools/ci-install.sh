@@ -141,9 +141,6 @@ case "$ci_distro" in
             libselinux1-dev \
             libsystemd-dev \
             libx11-dev \
-            python \
-            python-dbus \
-            python-gi \
             valgrind \
             wget \
             xauth \

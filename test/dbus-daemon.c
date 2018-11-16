@@ -1,8 +1,9 @@
 /* Integration tests for the dbus-daemon
  *
  * Author: Simon McVittie <simon.mcvittie@collabora.co.uk>
+ * Copyright © 2008 Red Hat, Inc.
  * Copyright © 2010-2011 Nokia Corporation
- * Copyright © 2015 Collabora Ltd.
+ * Copyright © 2015-2018 Collabora Ltd.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -103,6 +104,7 @@ typedef struct {
     gboolean right_conn_echo;
     gboolean right_conn_hold;
     gboolean wait_forever_called;
+    guint activation_forking_counter;
 
     gchar *tmp_runtime_dir;
     gchar *saved_runtime_dir;
@@ -1946,6 +1948,225 @@ test_fd_limit (Fixture *f,
 
 #endif /* !HAVE_PRLIMIT */
 }
+
+#define ECHO_SERVICE "org.freedesktop.DBus.TestSuiteEchoService"
+#define FORKING_ECHO_SERVICE "org.freedesktop.DBus.TestSuiteForkingEchoService"
+#define ECHO_SERVICE_PATH "/org/freedesktop/TestSuite"
+#define ECHO_SERVICE_INTERFACE "org.freedesktop.TestSuite"
+
+/*
+ * Helper for test_activation_forking: whenever the forking service is
+ * activated, start it again.
+ */
+static DBusHandlerResult
+activation_forking_signal_filter (DBusConnection *connection,
+                                  DBusMessage *message,
+                                  void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+                              "NameOwnerChanged"))
+    {
+      dbus_bool_t ok;
+      const char *name;
+      const char *old_owner;
+      const char *new_owner;
+
+      ok = dbus_message_get_args (message, &f->e,
+                                  DBUS_TYPE_STRING, &name,
+                                  DBUS_TYPE_STRING, &old_owner,
+                                  DBUS_TYPE_STRING, &new_owner,
+                                  DBUS_TYPE_INVALID);
+      test_assert_no_error (&f->e);
+      g_assert_true (ok);
+
+      g_test_message ("owner of \"%s\": \"%s\" -> \"%s\"",
+                      name, old_owner, new_owner);
+
+      if (g_strcmp0 (name, FORKING_ECHO_SERVICE) != 0)
+        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+      if (f->activation_forking_counter > 10)
+        {
+          g_test_message ("Activated 10 times OK, TestSuiteForkingEchoService pass");
+          return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+        }
+
+      f->activation_forking_counter++;
+
+      if (g_strcmp0 (new_owner, "") == 0)
+        {
+          /* Reactivate it, and tell it to exit immediately. */
+          DBusMessage *echo_call = NULL;
+          DBusMessage *exit_call = NULL;
+          gchar *payload = NULL;
+
+          payload = g_strdup_printf ("counter %u", f->activation_forking_counter);
+          echo_call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                                    ECHO_SERVICE_PATH,
+                                                    ECHO_SERVICE_INTERFACE,
+                                                    "Echo");
+          exit_call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                                    ECHO_SERVICE_PATH,
+                                                    ECHO_SERVICE_INTERFACE,
+                                                    "Exit");
+
+          if (echo_call == NULL ||
+              !dbus_message_append_args (echo_call,
+                                         DBUS_TYPE_STRING, &payload,
+                                         DBUS_TYPE_INVALID) ||
+              exit_call == NULL ||
+              !dbus_connection_send (connection, echo_call, NULL) ||
+              !dbus_connection_send (connection, exit_call, NULL))
+            g_error ("OOM");
+
+          dbus_clear_message (&echo_call);
+          dbus_clear_message (&exit_call);
+          g_free (payload);
+        }
+    }
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
+/*
+ * Assert that Unix services are allowed to daemonize, and this does not
+ * cause us to signal an activation failure.
+ */
+static void
+test_activation_forking (Fixture *f,
+                         gconstpointer context G_GNUC_UNUSED)
+{
+  DBusMessage *call = NULL;
+  DBusMessage *reply = NULL;
+  const char *hello = "hello world";
+
+  if (f->skip)
+    return;
+
+  if (!dbus_connection_add_filter (f->left_conn,
+                                   activation_forking_signal_filter,
+                                   f, NULL))
+    g_error ("OOM");
+
+  /* Start it up */
+  call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                       ECHO_SERVICE_PATH,
+                                       ECHO_SERVICE_INTERFACE,
+                                       "Echo");
+
+  if (call == NULL ||
+      !dbus_message_append_args (call,
+                                 DBUS_TYPE_STRING, &hello,
+                                 DBUS_TYPE_INVALID))
+    g_error ("OOM");
+
+  dbus_bus_add_match (f->left_conn,
+                      "sender='org.freedesktop.DBus'",
+                      &f->e);
+  test_assert_no_error (&f->e);
+
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, call,
+                                           DBUS_TIMEOUT_USE_DEFAULT);
+  dbus_clear_message (&call);
+  g_test_message ("TestSuiteForkingEchoService initial reply OK");
+  dbus_clear_message (&reply);
+
+  /* Now monitor for exits: when that happens, start it up again.
+   * The goal here is to try to hit any race conditions in activation. */
+  f->activation_forking_counter = 0;
+
+  call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                       ECHO_SERVICE_PATH,
+                                       ECHO_SERVICE_INTERFACE,
+                                       "Exit");
+
+  if (call == NULL || !dbus_connection_send (f->left_conn, call, NULL))
+    g_error ("OOM");
+
+  dbus_clear_message (&call);
+
+  while (f->activation_forking_counter <= 10)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  dbus_connection_remove_filter (f->left_conn,
+                                 activation_forking_signal_filter, f);
+}
+
+/*
+ * Helper for test_system_signals: Receive Foo signals and add them to
+ * the held_messages queue.
+ */
+static DBusHandlerResult
+foo_signal_filter (DBusConnection *connection,
+                   DBusMessage *message,
+                   void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, ECHO_SERVICE_INTERFACE, "Foo"))
+    g_queue_push_tail (&f->held_messages, dbus_message_ref (message));
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
+/*
+ * Assert that the system bus(-like) configuration allows services
+ * to emit signals, even if there is no service-specific configuration
+ * to allow it.
+ *
+ * Essentially equivalent to the old test/name-test/test-wait-for-echo.py.
+ */
+static void
+test_system_signals (Fixture *f,
+                     gconstpointer context G_GNUC_UNUSED)
+{
+  DBusMessage *call = NULL;
+  DBusMessage *response = NULL;
+
+  g_test_bug ("18229");
+
+  if (f->skip)
+    return;
+
+  if (!dbus_connection_add_filter (f->left_conn, foo_signal_filter,
+                                   f, NULL))
+    g_error ("OOM");
+
+  dbus_bus_add_match (f->left_conn,
+                      "interface='" ECHO_SERVICE_INTERFACE "'",
+                      &f->e);
+  test_assert_no_error (&f->e);
+
+  call = dbus_message_new_method_call (ECHO_SERVICE,
+                                       ECHO_SERVICE_PATH,
+                                       ECHO_SERVICE_INTERFACE,
+                                       "EmitFoo");
+
+  if (call == NULL || !dbus_connection_send (f->left_conn, call, NULL))
+    g_error ("OOM");
+
+  dbus_clear_message (&call);
+
+  while (g_queue_get_length (&f->held_messages) < 1)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  g_test_message ("got signal");
+  g_assert_cmpuint (g_queue_get_length (&f->held_messages), ==, 1);
+  response = g_queue_pop_head (&f->held_messages);
+  g_assert_cmpint (dbus_message_get_type (response), ==,
+                   DBUS_MESSAGE_TYPE_SIGNAL);
+  g_assert_cmpstr (dbus_message_get_interface (response), ==,
+                   ECHO_SERVICE_INTERFACE);
+  g_assert_cmpstr (dbus_message_get_path (response), ==,
+                   ECHO_SERVICE_PATH);
+  g_assert_cmpstr (dbus_message_get_signature (response), ==, "d");
+  g_assert_cmpstr (dbus_message_get_member (response), ==, "Foo");
+  dbus_clear_message (&response);
+
+  dbus_connection_remove_filter (f->left_conn, foo_signal_filter, f);
+}
 #endif
 
 static void
@@ -2077,6 +2298,16 @@ static Config as_another_user_config = {
      * real system bus does */
     TEST_USER_ROOT, SPECIFY_ADDRESS
 };
+
+static Config tmp_session_config = {
+    NULL, 1, "valid-config-files/tmp-session.conf",
+    TEST_USER_ME, SPECIFY_ADDRESS
+};
+
+static Config nearly_system_config = {
+    NULL, 1, "valid-config-files-system/tmp-session-like-system.conf",
+    TEST_USER_ME, SPECIFY_ADDRESS
+};
 #endif
 
 int
@@ -2160,6 +2391,11 @@ main (int argc,
               setup, test_fd_limit, teardown);
   g_test_add ("/fd-limit/system", Fixture, &as_another_user_config,
               setup, test_fd_limit, teardown);
+
+  g_test_add ("/activation/forking", Fixture, &tmp_session_config,
+              setup, test_activation_forking, teardown);
+  g_test_add ("/system-policy/allow-signals", Fixture, &nearly_system_config,
+              setup, test_system_signals, teardown);
 #endif
 
   ret = g_test_run ();

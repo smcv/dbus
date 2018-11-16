@@ -53,22 +53,8 @@ c_test () {
   interpret_result "$e" "$t" "$@"
 }
 
-py_test () {
-  t="$1"
-  shift
-  if test "x$PYTHON" = "x:"; then
-    interpret_result 77 "$t" "(Python interpreter not found)"
-  else
-    e=0
-    echo "# running test $t"
-    $PYTHON "$DBUS_TOP_SRCDIR/test/name-test/$t" "$@" >&2 || e=$?
-    interpret_result "$e" "$t" "$@"
-  fi
-}
-
 test_num=1
-# TAP test plan: we will run 2 tests
-echo "1..2"
+# TAP test plan: we will run 1 test
+echo "1..1"
 
-py_test test-activation-forking.py
 c_test test-autolaunch
