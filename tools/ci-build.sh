@@ -139,6 +139,7 @@ case "$ci_buildsys" in
                     *)
                         set "$@" --enable-containers
                         set "$@" --enable-user-session
+                        set "$@" SANITIZE_CFLAGS="-fsanitize=address -fsanitize=undefined -fno-sanitize=alignment -fPIE -pie"
                         ;;
                 esac
                 shift
