@@ -7,6 +7,8 @@ add_definitions(${DBUS_INTERNAL_CLIENT_DEFINITIONS})
 set(DBUS_SESSION_BUS_LISTEN_ADDRESS ${TEST_LISTEN})
 
 add_library(dbus-testutils STATIC
+    ${TEST_DIR}/disable-crash-handling.c
+    ${TEST_DIR}/disable-crash-handling.h
     ${TEST_DIR}/test-utils.h
     ${TEST_DIR}/test-utils.c
 )
@@ -46,7 +48,12 @@ set (test-exit_SOURCES
     ${TEST_DIR}/test-exit.c
 )
 
+# We have to compile a separate copy of disable-crash-handling.c for
+# test-segfault rather than using the libdbus-testutils library, because
+# otherwise it would fail to link when using the AddressSanitizer.
 set (test-segfault_SOURCES
+    ${TEST_DIR}/disable-crash-handling.c
+    ${TEST_DIR}/disable-crash-handling.h
     ${TEST_DIR}/test-segfault.c
 )
 
@@ -70,7 +77,10 @@ add_test_executable(test-printf ${TEST_DIR}/internals/printf.c dbus-testutils)
 add_helper_executable(test-shell-service ${test-shell-service_SOURCES} dbus-testutils)
 add_helper_executable(test-spawn ${test-spawn_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 add_helper_executable(test-exit ${test-exit_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
-add_helper_executable(test-segfault ${test-segfault_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+# the second argument of add_helper_executable() is a whitespace-separated
+# list of source files and the third and subsequent arguments are libraries
+# to link, hence the quoting here
+add_helper_executable(test-segfault "${test-segfault_SOURCES}")
 add_helper_executable(test-sleep-forever ${test-sleep-forever_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 add_helper_executable(manual-tcp ${manual-tcp_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 add_helper_executable(manual-backtrace ${TEST_DIR}/manual-backtrace.c dbus-1)

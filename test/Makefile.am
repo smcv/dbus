@@ -28,6 +28,8 @@ AM_CFLAGS = \
 noinst_LTLIBRARIES = libdbus-testutils.la
 
 libdbus_testutils_la_SOURCES = \
+	disable-crash-handling.c \
+	disable-crash-handling.h \
 	test-utils.c \
 	test-utils.h \
 	$(NULL)
@@ -107,8 +109,14 @@ test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_refs_SOURCES = internals/refs.c
 test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
-test_segfault_SOURCES = test-segfault.c
-test_segfault_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+# We have to compile a separate copy of disable-crash-handling.c for
+# test-segfault rather than using libdbus-testutils.la, because
+# otherwise it would fail to link when using the AddressSanitizer.
+test_segfault_SOURCES = \
+	disable-crash-handling.c \
+	disable-crash-handling.h \
+	test-segfault.c \
+	$(NULL)
 
 test_server_oom_SOURCES = internals/server-oom.c
 test_server_oom_LDADD = libdbus-testutils.la $(GLIB_LIBS)

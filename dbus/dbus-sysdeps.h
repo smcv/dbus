@@ -732,8 +732,6 @@ void _dbus_combine_tcp_errors (DBusList **sources,
                                const char *port,
                                DBusError *dest);
 
-void _dbus_disable_crash_handling (void);
-
 /** @} */
 
 DBUS_END_DECLS

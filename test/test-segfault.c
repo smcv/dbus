@@ -5,7 +5,7 @@
 #include <signal.h>
 #endif
 
-#include "dbus/dbus-sysdeps.h"
+#include "disable-crash-handling.h"
 
 int
 main (int argc, char **argv)

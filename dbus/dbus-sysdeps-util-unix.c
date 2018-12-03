@@ -1587,28 +1587,3 @@ _dbus_daemon_report_stopping (void)
   sd_notify (0, "STOPPING=1");
 #endif
 }
-
-/**
- * Try to disable core dumps and similar special crash handling.
- */
-void
-_dbus_disable_crash_handling (void)
-{
-#ifdef HAVE_SETRLIMIT
-  /* No core dumps please, we know we crashed. */
-  struct rlimit r = { 0, };
-
-  getrlimit (RLIMIT_CORE, &r);
-  r.rlim_cur = 0;
-  setrlimit (RLIMIT_CORE, &r);
-#endif
-
-#if defined(HAVE_PRCTL) && defined(PR_SET_DUMPABLE)
-  /* Really, no core dumps please. On Linux, if core_pattern is
-   * set to a pipe (for abrt/apport/corekeeper/etc.), RLIMIT_CORE of 0
-   * is ignored (deliberately, so people can debug init(8) and other
-   * early stuff); but Linux has PR_SET_DUMPABLE, so we can avoid core
-   * dumps anyway. */
-  prctl (PR_SET_DUMPABLE, 0, 0, 0, 0);
-#endif
-}

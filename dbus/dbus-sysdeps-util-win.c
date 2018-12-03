@@ -1688,27 +1688,3 @@ _dbus_win_stderr_win_error (const char    *app,
   fprintf (stderr, "%s: %s: %s\n", app, message, error.message);
   dbus_error_free (&error);
 }
-
-static int exception_handler (LPEXCEPTION_POINTERS p) _DBUS_GNUC_NORETURN;
-
-static int
-exception_handler (LPEXCEPTION_POINTERS p)
-{
-  ExitProcess (0xc0000005);
-}
-
-/**
- * Try to disable core dumps and similar special crash handling.
- */
-void
-_dbus_disable_crash_handling (void)
-{
-  /* Disable Windows popup dialog when an app crashes so that app quits
-   * immediately with error code instead of waiting for user to dismiss
-   * the dialog.  */
-  DWORD dwMode = SetErrorMode (SEM_NOGPFAULTERRORBOX);
-
-  SetErrorMode (dwMode | SEM_NOGPFAULTERRORBOX);
-  /* Disable "just in time" debugger */
-  SetUnhandledExceptionFilter ((LPTOP_LEVEL_EXCEPTION_FILTER) &exception_handler);
-}

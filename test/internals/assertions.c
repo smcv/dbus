@@ -26,6 +26,7 @@
 
 #include <dbus/dbus.h>
 #include "dbus/dbus-internals.h"
+#include "disable-crash-handling.h"
 #include "test-utils-glib.h"
 
 typedef struct
