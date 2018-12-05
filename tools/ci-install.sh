@@ -181,7 +181,7 @@ case "$ci_distro" in
 
             (*)
                 # assume Ubuntu 18.04 'bionic', Debian 10 'buster' or newer
-                $sudo apt-get -qq -y --no-install-recommends install ducktype
+                $sudo apt-get -qq -y --no-install-recommends install ducktype yelp-tools
                 ;;
         esac
         ;;
