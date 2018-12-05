@@ -878,12 +878,6 @@ fi
 AM_CONDITIONAL(HAVE_SELINUX, test x$have_selinux = xyes)
 
 if test x$have_selinux = xyes ; then
-    # the selinux code creates threads
-    # which requires libpthread even on linux
-    AC_CHECK_FUNC(pthread_create,,[AC_CHECK_LIB(pthread,pthread_create,
-                                                [SELINUX_THREAD_LIBS="-lpthread"])])
-
-    SELINUX_LIBS="$SELINUX_LIBS $SELINUX_THREAD_LIBS"
     AC_DEFINE(HAVE_SELINUX,1,[SELinux support])
 else
     SELINUX_LIBS=
