@@ -161,7 +161,7 @@ case "$ci_distro" in
         if [ "$ci_in_docker" = yes ]; then
             # Add the user that we will use to do the build inside the
             # Docker container, and let them use sudo
-            adduser --disabled-password user </dev/null
+            adduser --disabled-password --gecos "" user
             echo "user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/nopasswd
             chmod 0440 /etc/sudoers.d/nopasswd
         fi
