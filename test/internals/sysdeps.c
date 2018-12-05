@@ -43,13 +43,52 @@ setup (Fixture *f G_GNUC_UNUSED,
  * handle (a HANDLE, vaguely analogous to a file descriptor) on Windows.
  * For _dbus_command_for_pid() we need an actual process ID. */
 #ifdef G_OS_UNIX
+# include <errno.h>
+# include <sys/wait.h>
+# include <sys/types.h>
+
 # define NO_PROCESS 0
-# define terminate(process) kill (process, SIGTERM)
-# define get_pid(process) process
+# ifndef G_PID_FORMAT
+#   define G_PID_FORMAT "i"
+# endif
+
+static unsigned long
+get_pid (pid_t process)
+{
+  return process;
+}
+
+static void
+terminate_and_wait (pid_t process)
+{
+  int ret;
+
+  kill (process, SIGTERM);
+
+  do
+    {
+      ret = waitpid (process, NULL, 0);
+    }
+  while (ret == -1 && errno == EINTR);
+}
 #else
 # define NO_PROCESS NULL
-# define terminate(process) TerminateProcess (process, 1)
-# define get_pid(process) GetProcessId (process)
+# ifndef G_PID_FORMAT
+#   define G_PID_FORMAT "p"
+# endif
+
+static unsigned long
+get_pid (HANDLE process)
+{
+  return GetProcessId (process);
+}
+
+static void
+terminate_and_wait (HANDLE process)
+{
+  TerminateProcess (process, 1);
+  WaitForSingleObject (process, INFINITE);
+}
 #endif
 
 static void
@@ -73,11 +112,17 @@ test_command_for_pid (Fixture *f,
 
   argv[1] = g_strdup ("bees");
 
-  if (!g_spawn_async (NULL, argv, NULL, G_SPAWN_DEFAULT, NULL, NULL,
+  if (!g_spawn_async (NULL, argv, NULL,
+                      (G_SPAWN_STDOUT_TO_DEV_NULL |
+                       G_SPAWN_STDERR_TO_DEV_NULL |
+                       G_SPAWN_DO_NOT_REAP_CHILD),
+                      NULL, NULL,
                       &process, &error))
     g_error ("Unable to run %s: %s", argv[0], error->message);
 
   pid = get_pid (process);
+  g_test_message ("Process ID of process handle %" G_PID_FORMAT ": %lu",
+                  process, pid);
 
   if (!_dbus_string_init (&string))
     g_error ("out of memory");
@@ -99,8 +144,8 @@ test_command_for_pid (Fixture *f,
     }
   else
     {
-      g_test_message ("Unable to get command for process ID: %s: %s",
-                      d_error.name, d_error.message);
+      g_test_message ("Unable to get command for process %lu: %s: %s",
+                      pid, d_error.name, d_error.message);
       g_assert_nonnull (d_error.name);
       g_assert_nonnull (d_error.message);
       dbus_error_free (&d_error);
@@ -127,11 +172,11 @@ test_command_for_pid (Fixture *f,
     }
   else
     {
-      g_test_message ("Unable to get command for process ID");
+      g_test_message ("Unable to get command for process %lu", pid);
     }
 
   if (process != NO_PROCESS)
-    terminate (process);
+    terminate_and_wait (process);
 
   _dbus_string_free (&string);
   g_spawn_close_pid (process);
