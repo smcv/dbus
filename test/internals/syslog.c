@@ -78,15 +78,19 @@ test_syslog_normal (Fixture *f,
 
   g_test_trap_subprocess (NULL, 0, 0);
   g_test_trap_assert_passed ();
-  g_test_trap_assert_stderr ("*" MESSAGE "42\n"
-                             "*" MESSAGE "45\n"
-                             "*" MESSAGE "666\n"
-                             "*" MESSAGE "23\n"
+  /* Deliberately not matching newlines: in Windows they might come out as
+   * either \n or \r\n, perhaps depending on GLib version or on whether
+   * we're using Wine or real Windows. */
+  g_test_trap_assert_stderr ("*" MESSAGE "42"
+                             "*" MESSAGE "45"
+                             "*" MESSAGE "666"
+                             "*" MESSAGE "23"
                              "*test-syslog-stderr*" MESSAGE
-                               "this should not appear in the syslog\n"
+                               "this should not appear in the syslog"
                              "*test-syslog-both*" MESSAGE
                                "this should appear in the syslog and "
-                               "on stderr\n");
+                               "on stderr"
+                             "*");
   g_test_trap_assert_stderr_unmatched ("*this should appear in the syslog "
                                        "only*");
   g_test_trap_assert_stderr_unmatched ("*test-syslog-only*");
